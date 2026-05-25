@@ -13,6 +13,7 @@ seams are noted inline.
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID, uuid4
 
 from langgraph.graph import END, START, StateGraph
@@ -42,7 +43,7 @@ def _accumulate(
     return sorted(best.values(), key=lambda c: c.score, reverse=True)
 
 
-def async_sqlite_saver(path: str = ":memory:"):  # type: ignore[no-untyped-def]
+def async_sqlite_saver(path: str = ":memory:") -> Any:
     """Build an ``AsyncSqliteSaver`` for checkpointing (SPEC §6.1).
 
     The orchestrator runs async (``ainvoke``), so the sync ``SqliteSaver`` cannot
@@ -55,7 +56,7 @@ def async_sqlite_saver(path: str = ":memory:"):  # type: ignore[no-untyped-def]
     return AsyncSqliteSaver(aiosqlite.connect(path))
 
 
-def build_orchestrator(deps: OrchestratorDeps, *, checkpointer: object | None = None):  # type: ignore[no-untyped-def]
+def build_orchestrator(deps: OrchestratorDeps, *, checkpointer: Any = None) -> Any:
     """Build and compile the Phase 1 orchestrator graph.
 
     ``checkpointer`` defaults to an in-process ``MemorySaver`` (async-safe, no

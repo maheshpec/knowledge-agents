@@ -6,6 +6,7 @@ from common.schemas import Chunk, Query, RetrievalCandidate, RetrievalResult
 from harness.citation import CitationEnforcer, CitedDraft, CitedSegment
 from harness.context import DefaultPacker
 from harness.orchestrator import OrchestratorDeps, build_orchestrator, initial_state
+from harness.orchestrator.graph import async_sqlite_saver
 from harness.planning import ReactPlanner
 
 
@@ -91,3 +92,16 @@ async def test_budget_exhausted_finalizes_early():
     assert pipe.calls == 0  # never retrieves; routes straight to answer
     assert "budget" in final["result"].text.lower()
     assert final["result"].citations == []
+
+
+async def test_runs_with_async_sqlite_checkpointer():
+    # SPEC §6.1: the graph must run under the (async) SqliteSaver checkpointer.
+    pipe = FakePipeline(_cands(3))
+    app = build_orchestrator(_deps(pipe), checkpointer=async_sqlite_saver(":memory:"))
+    thread_id = str(uuid4())
+    cfg = {"configurable": {"thread_id": thread_id}}
+    final = await app.ainvoke(initial_state("what is fact 0?", budget_usd=1.0), cfg)
+    assert final["result"].text == "fact number 0"
+    # state was checkpointed under the thread id and is retrievable
+    snapshot = await app.aget_state(cfg)
+    assert snapshot.values["result"].text == "fact number 0"

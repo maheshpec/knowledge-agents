@@ -12,6 +12,7 @@ license = { text = "Proprietary" }
 dependencies = [
     "langgraph>=0.2",
     "langgraph-checkpoint-sqlite>=2.0",
+    "aiosqlite>=0.20",  # async checkpointer backend for the orchestrator (SPEC §6.1)
     "langchain>=0.3",
     "langchain-anthropic>=0.3",
     "langchain-voyageai>=0.1",
