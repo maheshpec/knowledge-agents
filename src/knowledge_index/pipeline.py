@@ -82,9 +82,7 @@ class IngestionPipeline:
         for d in docs:
             dedup.add(d.doc_id, d.text)
         clusters = dedup.clusters()
-        doc_to_cluster = {
-            doc_id: root for root, members in clusters.items() for doc_id in members
-        }
+        doc_to_cluster = {doc_id: root for root, members in clusters.items() for doc_id in members}
         near_dup_docs = sum(len(m) for m in clusters.values())
 
         all_chunks: list[Chunk] = []

@@ -99,9 +99,7 @@ class ContextualEnricher:
         # the per-chunk instruction tail is not cached.
         return [
             cacheable_text_block(f"<document>\n{doc_text}\n</document>", cache=True),
-            cacheable_text_block(
-                _CONTEXT_INSTRUCTION.format(chunk=chunk_text), cache=False
-            ),
+            cacheable_text_block(_CONTEXT_INSTRUCTION.format(chunk=chunk_text), cache=False),
         ]
 
     async def enrich(self, doc: ParsedDoc, chunks: list[Chunk]) -> list[Chunk]:
@@ -143,7 +141,8 @@ class SummaryEnricher:
 
             async def _complete(blocks: list[dict[str, Any]]) -> str:
                 resp = await client.messages.create(
-                    model=self.model, max_tokens=60,
+                    model=self.model,
+                    max_tokens=60,
                     messages=[{"role": "user", "content": blocks}],
                 )
                 return "".join(
@@ -159,8 +158,7 @@ class SummaryEnricher:
             async with sem:
                 blocks = [
                     cacheable_text_block(
-                        "Summarize the following text in one short sentence.\n\n"
-                        f"{chunk.text}",
+                        f"Summarize the following text in one short sentence.\n\n{chunk.text}",
                         cache=False,
                     )
                 ]

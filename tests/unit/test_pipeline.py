@@ -59,5 +59,5 @@ async def test_build_pipeline_from_config(tmp_path):
     }
     pipeline = build_pipeline_from_config(cfg, index=index)
     stats = await pipeline.ingest_dir(tmp_path)
-    assert stats.docs == 2
+    assert stats.docs == 3  # 2 written + 1 near-duplicate file
     assert await index.count() == stats.chunks

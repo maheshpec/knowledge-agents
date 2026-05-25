@@ -83,9 +83,10 @@ class HashingBM25Encoder:
     def _hash(self, token: str) -> int:
         import hashlib
 
-        return int.from_bytes(
-            hashlib.blake2b(token.encode(), digest_size=4).digest(), "big"
-        ) % self.vocab_size
+        return (
+            int.from_bytes(hashlib.blake2b(token.encode(), digest_size=4).digest(), "big")
+            % self.vocab_size
+        )
 
     def _encode(self, text: str) -> SparseVector:
         tokens = _tokenize(text)
@@ -132,10 +133,7 @@ class FastEmbedBM25Encoder:
 
     def encode_documents(self, texts: list[str]) -> list[SparseVector]:
         model = self._get_model()
-        return [
-            (emb.indices.tolist(), emb.values.tolist())
-            for emb in model.embed(texts)
-        ]
+        return [(emb.indices.tolist(), emb.values.tolist()) for emb in model.embed(texts)]
 
     def encode_query(self, text: str) -> SparseVector:
         model = self._get_model()

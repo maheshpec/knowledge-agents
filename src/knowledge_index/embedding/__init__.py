@@ -19,9 +19,7 @@ EMBEDDER_REGISTRY: dict[str, type] = {
 }
 
 
-def build_embedder(
-    name: str, *, cache: EmbeddingCache | None = None, **params: Any
-) -> Embedder:
+def build_embedder(name: str, *, cache: EmbeddingCache | None = None, **params: Any) -> Embedder:
     """Construct an embedder by registry name.
 
     For the model-named registry entries the model id is passed through so a

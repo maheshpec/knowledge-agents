@@ -13,8 +13,9 @@ from knowledge_index.ingestion.base import ParsedDoc
 
 
 def _doc() -> ParsedDoc:
-    return ParsedDoc(doc_id="d1", text="Full document text about cats and dogs.",
-                     metadata={"title": "Animals"})
+    return ParsedDoc(
+        doc_id="d1", text="Full document text about cats and dogs.", metadata={"title": "Animals"}
+    )
 
 
 def _chunks() -> list[Chunk]:

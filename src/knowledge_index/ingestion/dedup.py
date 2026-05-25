@@ -44,8 +44,12 @@ def _make_coeffs(num_perm: int, seed: int = 0) -> _HashCoeffs:
     a: list[int] = []
     b: list[int] = []
     for i in range(num_perm):
-        ha = int.from_bytes(hashlib.blake2b(f"{seed}:a:{i}".encode(), digest_size=8).digest(), "big")
-        hb = int.from_bytes(hashlib.blake2b(f"{seed}:b:{i}".encode(), digest_size=8).digest(), "big")
+        ha = int.from_bytes(
+            hashlib.blake2b(f"{seed}:a:{i}".encode(), digest_size=8).digest(), "big"
+        )
+        hb = int.from_bytes(
+            hashlib.blake2b(f"{seed}:b:{i}".encode(), digest_size=8).digest(), "big"
+        )
         a.append((ha % (_MERSENNE_PRIME - 1)) + 1)  # non-zero
         b.append(hb % _MERSENNE_PRIME)
     return _HashCoeffs(a, b)
@@ -107,7 +111,8 @@ class MinHashDeduplicator:
         matches = [
             other
             for other in candidates
-            if other != doc_id and self._estimated_jaccard(sig, self._signatures[other]) >= self.threshold
+            if other != doc_id
+            and self._estimated_jaccard(sig, self._signatures[other]) >= self.threshold
         ]
         for band in range(self.bands):
             key = (band, self._band_hash(sig, band))
@@ -117,9 +122,7 @@ class MinHashDeduplicator:
     def _band_hash(self, sig: list[int], band: int) -> int:
         start = band * self.rows
         chunk = tuple(sig[start : start + self.rows])
-        return int.from_bytes(
-            hashlib.blake2b(repr(chunk).encode(), digest_size=8).digest(), "big"
-        )
+        return int.from_bytes(hashlib.blake2b(repr(chunk).encode(), digest_size=8).digest(), "big")
 
     def _candidates(self, sig: list[int]) -> set[str]:
         out: set[str] = set()
@@ -154,7 +157,10 @@ class MinHashDeduplicator:
 
         for doc_id, sig in self._signatures.items():
             for other in self._candidates(sig):
-                if other != doc_id and self._estimated_jaccard(sig, self._signatures[other]) >= self.threshold:
+                if (
+                    other != doc_id
+                    and self._estimated_jaccard(sig, self._signatures[other]) >= self.threshold
+                ):
                     union(doc_id, other)
 
         groups: dict[str, list[str]] = {}

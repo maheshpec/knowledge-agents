@@ -32,6 +32,23 @@ def _point_id(chunk_id: str) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_URL, chunk_id))
 
 
+def _jsonable_vector(vector: Any) -> Any:
+    """Normalize a scrolled vector payload into a JSON-serializable structure.
+
+    Named sparse vectors come back as qdrant ``SparseVector`` objects; flatten
+    them to ``{"indices": [...], "values": [...]}`` so snapshots round-trip.
+    """
+    if isinstance(vector, dict):
+        out: dict[str, Any] = {}
+        for name, vec in vector.items():
+            if hasattr(vec, "indices") and hasattr(vec, "values"):
+                out[name] = {"indices": list(vec.indices), "values": list(vec.values)}
+            else:
+                out[name] = vec
+        return out
+    return vector
+
+
 class QdrantIndex:
     """Hybrid (dense + sparse) Qdrant-backed index with ACL filtering."""
 
@@ -211,10 +228,14 @@ class QdrantIndex:
                 with_vectors=True,
             )
             for p in points:
-                records.append({"id": p.id, "vector": p.vector, "payload": p.payload})
+                records.append(
+                    {"id": p.id, "vector": _jsonable_vector(p.vector), "payload": p.payload}
+                )
             if offset is None:
                 break
-        path.write_text(json.dumps({"collection": self.collection, "dim": self.dim, "points": records}))
+        path.write_text(
+            json.dumps({"collection": self.collection, "dim": self.dim, "points": records})
+        )
         return SnapshotRef(
             collection=self.collection, name=name, location=str(path), count=len(records)
         )
@@ -227,7 +248,9 @@ class QdrantIndex:
             raise KnowledgeAgentError("snapshot ref has no location to restore from")
         data = json.loads(Path(ref.location).read_text())
         client = self._get_client()
-        await client.recreate_collection(
+        if await client.collection_exists(self.collection):
+            await client.delete_collection(self.collection)
+        await client.create_collection(
             collection_name=self.collection,
             vectors_config={
                 DENSE: m.VectorParams(size=self.dim, distance=m.Distance[self.distance.upper()])

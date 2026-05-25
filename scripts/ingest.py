@@ -29,6 +29,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--config", default="default", help="Hydra config name.")
     p.add_argument("--embedder", default=None, help="Override embedder (e.g. 'hash').")
     p.add_argument(
+        "--enricher",
+        default=None,
+        help="Override enricher (e.g. 'null'/'title' for offline runs without an LLM key).",
+    )
+    p.add_argument(
         "--acl",
         default=None,
         help="Comma-separated principals to attach as the ACL for ingested chunks.",
@@ -47,12 +52,16 @@ async def _run(args: argparse.Namespace) -> int:
     idx_cfg = dict(cfg.get("index", {}))
 
     if args.embedder:
-        emb = dict(idx_cfg.get("embedder", {}))
-        emb["name"] = args.embedder
-        idx_cfg["embedder"] = emb
+        # Fresh dict so a stale `dim` from the default config can't mismatch the
+        # overriding embedder (e.g. hash defaults to 256, not voyage's 1024).
+        idx_cfg["embedder"] = {"name": args.embedder}
+    if args.enricher:
+        idx_cfg["enricher"] = {"name": args.enricher}
 
-    embedder_name = idx_cfg.get("embedder", {}).get("name", "hash")
-    dim = 256 if embedder_name == "hash" else int(idx_cfg.get("embedder", {}).get("dim", 1024))
+    emb_cfg = idx_cfg.get("embedder", {})
+    embedder_name = emb_cfg.get("name", "hash")
+    default_dim = 256 if embedder_name == "hash" else 1024
+    dim = int(emb_cfg.get("dim", default_dim))
 
     index_kwargs: dict = {"collection": args.collection, "dim": dim}
     if args.in_memory:
@@ -66,9 +75,7 @@ async def _run(args: argparse.Namespace) -> int:
     index = QdrantIndex(**index_kwargs)
 
     cache = EmbeddingCache(settings.embedding_cache_path)
-    pipeline = build_pipeline_from_config(
-        {"index": idx_cfg}, index=index, embedding_cache=cache
-    )
+    pipeline = build_pipeline_from_config({"index": idx_cfg}, index=index, embedding_cache=cache)
 
     acl = args.acl.split(",") if args.acl else None
     stats = await pipeline.ingest_dir(args.src, acl=acl)

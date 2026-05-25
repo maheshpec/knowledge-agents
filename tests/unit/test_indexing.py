@@ -6,6 +6,7 @@ HashingBM25 sparse encoder, so these run with no server and no network.
 
 import pytest
 
+from common.errors import KnowledgeAgentError
 from common.schemas import Chunk
 from knowledge_index.embedding import HashEmbedder
 from knowledge_index.enrichment.base import embedding_text
@@ -95,5 +96,5 @@ async def test_snapshot_and_restore():
 
 async def test_upsert_requires_embedding():
     index = QdrantIndex("noemb", dim=8, location=":memory:")
-    with pytest.raises(Exception):
+    with pytest.raises(KnowledgeAgentError):
         await index.upsert([Chunk(chunk_id="x", doc_id="d", text="no vector")])
