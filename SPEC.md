@@ -96,6 +96,13 @@ Build a production-grade knowledge agent harness composed of:
 | Testing | **pytest** + **ragas** + custom retrieval evals | |
 | Package mgmt | **uv** | Fast, lockfile-based |
 
+### 3.1 Considered alternatives (and why not)
+
+- **MEOW / Gas City (Steve Yegge).** A Beads-based multi-agent orchestration framework with Dolt-backed git-versioned state. Genuinely interesting and the work-as-primitive model is a good one. Rejected for this project because (a) it targets teams running 10+ parallel agents and is explicitly counterproductive at smaller scales; (b) it's early-stage with significant cost and complexity; (c) it would create a second orchestration model running alongside LangGraph, which the harness itself uses — conceptual collision between "the system orchestrating the build" and "the system being built." We borrow one specific idea (git-versioned, replayable experiment records) in §8.2 without taking the framework dependency.
+- **LlamaIndex.** Overlaps heavily with LangChain. Choose-one situation; LangChain wins on LangGraph + LangSmith integration.
+- **Haystack.** Solid, but smaller ecosystem for the agentic + eval pieces we need.
+- **DSPy for prompt optimization.** Tempting for the self-improvement loop, but we want component-level evolution (chunker, retriever, reranker swaps), not prompt-token optimization. Could be layered in later for tuning prompts inside fixed pipelines.
+
 ---
 
 ## 4. Repository Structure
@@ -144,6 +151,7 @@ knowledge-agent/
 │   │   └── graph/
 │   ├── self_improvement/
 │   │   ├── registry/
+│   │   ├── ledger/                  # versioned experiment records (JSONL + git)
 │   │   ├── evolutionary/
 │   │   ├── reviewer/
 │   │   ├── pr_gen/
@@ -161,6 +169,9 @@ knowledge-agent/
 │   ├── unit/
 │   ├── integration/
 │   └── eval/
+├── experiments/                     # versioned experiment ledger (committed to git)
+│   ├── runs/
+│   └── lineage.parquet
 └── scripts/
     ├── ingest.py
     ├── eval_run.py
@@ -966,6 +977,73 @@ class EvolutionaryLoop:
 - Hold-out test set the loop NEVER sees; results checked only at the very end before PR.
 - Improvements must clear a delta threshold (e.g., +2% nDCG@10) to qualify.
 - Top candidates must show improvement on the rotating eval set too (Goodhart guard).
+
+#### 8.2.1 Experiment ledger (versioned, replayable, git-backed)
+
+Every evolutionary run produces atomic experiment records that must be replayable, auditable, and survivable across crashes. Inspired by the "work-as-primitive with git-versioned state" pattern from MEOW/Beads, without the framework dependency.
+
+Each experiment is an atomic record stored as JSONL under `experiments/` in the repo, with one file per generation. Git is the version control. The schema:
+
+```python
+class Experiment(BaseModel):
+    experiment_id: str            # uuid7 — time-orderable
+    parent_ids: list[str]         # lineage: which experiments this descends from (for crossover, both parents)
+    generation: int
+    run_id: str                   # groups experiments from one evolutionary run
+    config: PipelineConfig        # the full candidate config — chunker, enricher, retrievers, etc.
+    config_hash: str              # content-addressable; identical configs share results
+    mutation: MutationRecord | None  # what changed vs parent (component swap or param delta)
+    status: Literal["pending","running","evaluated","reviewed","accepted","rejected","failed"]
+    eval_results: dict[str, MetricResult] | None  # keyed by dataset name
+    reviewer_verdict: ReviewerVerdict | None
+    cost_usd: float
+    compute_seconds: float
+    created_at: datetime
+    completed_at: datetime | None
+    trace_ids: list[UUID]         # LangSmith pointers
+    artifacts: dict[str, str]     # paths to serialized indexes, eval outputs, etc.
+
+class MutationRecord(BaseModel):
+    type: Literal["mutate","crossover","seed"]
+    component: str                # e.g., "chunker"
+    change: dict[str, Any]        # before/after diff
+```
+
+**Storage layout:**
+
+```
+experiments/
+├── runs/
+│   └── {run_id}/
+│       ├── manifest.yaml         # run config: budget, generations, population size, dataset refs
+│       ├── gen-001.jsonl         # one Experiment per line
+│       ├── gen-002.jsonl
+│       └── ...
+└── lineage.parquet               # denormalized lineage graph for fast queries
+```
+
+**Why JSONL + git instead of a database:**
+- Append-only by construction; no concurrent-write coordination.
+- `git log` is the audit trail for free.
+- Diffable, reviewable in PRs.
+- Survives crashes — incomplete experiments are visible as `status: running` and can be resumed or garbage-collected.
+- Cheap to ship the whole experiment history with the repo for reproducibility.
+
+**Interface:**
+
+```python
+class ExperimentLedger(Protocol):
+    async def append(self, exp: Experiment) -> None: ...
+    async def update_status(self, experiment_id: str, status: str, **fields) -> None: ...
+    async def get(self, experiment_id: str) -> Experiment: ...
+    async def lineage(self, experiment_id: str) -> list[Experiment]: ...
+    async def query(self, predicate: Callable[[Experiment], bool]) -> list[Experiment]: ...
+    async def replay(self, experiment_id: str) -> EvalReport: ...  # re-runs the eval from stored config
+```
+
+**Replayability requirement:** given an `experiment_id`, the system must be able to re-execute the experiment end-to-end from its `config` and produce results within noise band of the original. This is the test that the experiment record is complete.
+
+The PR generator (§8.4) references experiment IDs in its evidence package. The adversarial reviewer (§8.3) can query the ledger to compare a candidate against its lineage.
 
 ### 8.3 Adversarial Reviewer (`self_improvement/reviewer/`) — Phase 4
 
