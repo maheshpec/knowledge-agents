@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol, TypedDict, runtime_checkable
 
+from langchain_core.messages import BaseMessage
+
 from common.schemas import (
     Citation,
     GenerationResult,
@@ -36,6 +38,8 @@ class OrchestratorState(TypedDict, total=False):
     """Checkpointed orchestrator state (SPEC §6.1)."""
 
     question: str
+    # Conversation history (Phase 2: multi-turn + compaction operate on this).
+    messages: list[BaseMessage]
     plan: Plan | None
     retrieval_results: list[RetrievalResult]
     candidates: list[RetrievalCandidate]

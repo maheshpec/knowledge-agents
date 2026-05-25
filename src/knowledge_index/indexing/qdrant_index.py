@@ -286,5 +286,29 @@ class QdrantIndex:
         res = await client.count(collection_name=self.collection)
         return int(res.count)
 
+    async def iter_chunks(self) -> list[Chunk]:
+        """Return every stored chunk (scroll over the whole collection).
+
+        Used by callers that must enumerate the index — e.g. long-term memory's
+        ``forget`` (SPEC §6.3). For large corpora prefer filtered search; this is
+        intended for the (small) memory collection, not the main corpus.
+        """
+        await self.ensure_collection()
+        client = self._get_client()
+        out: list[Chunk] = []
+        offset = None
+        while True:
+            points, offset = await client.scroll(
+                collection_name=self.collection,
+                limit=256,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+            out.extend(Chunk.model_validate(p.payload["chunk"]) for p in points)
+            if offset is None:
+                break
+        return out
+
 
 __all__ = ["QdrantIndex", "DENSE", "SPARSE"]
