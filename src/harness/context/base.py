@@ -10,21 +10,13 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 from langchain_core.messages import BaseMessage
-from pydantic import BaseModel
 
 from common.schemas import RetrievalResult
-from common.types import MemoryItem
 
-
-class Skill(BaseModel):
-    """A reusable instruction block injected into context (SPEC §6.5).
-
-    Phase 1 ships the type only; the skills loader lands in Phase 2, so callers
-    pass an empty list. Present here so the packer signature is stable.
-    """
-
-    name: str
-    instructions: str
+# The canonical Skill model lives in common.types (SPEC §6.8); re-exported here so
+# the packer signature and existing imports (`from harness.context import Skill`)
+# stay stable now that the Phase 2 loader produces these.
+from common.types import MemoryItem, Skill
 
 
 def estimate_tokens(text: str) -> int:

@@ -97,6 +97,62 @@ class LLMCallRecord(BaseModel):
     trace_id: UUID | None = None
 
 
+# --- Skills (SPEC §6.8) ----------------------------------------------------
+
+
+class SkillManifest(BaseModel):
+    """Lightweight skill metadata parsed from a ``SKILL.md`` front-matter block.
+
+    Carries only what selection needs (name + when-to-use blurb) plus the path to
+    load the full instructions from. Keeps ``discover`` cheap: no need to read
+    every skill body to decide which one is relevant.
+    """
+
+    name: str
+    description: str = ""
+    when_to_use: str = ""
+    path: str | None = None  # directory containing SKILL.md
+    scripts: list[str] = Field(default_factory=list)  # helper script filenames
+
+
+class Skill(BaseModel):
+    """A loaded instruction pack injected into context (SPEC §6.8 / §6.5).
+
+    ``name`` + ``instructions`` are the fields the context packer renders; the
+    rest is provenance/metadata. Lives here (not in ``harness.context``) so the
+    skills loader and the packer share one canonical type.
+    """
+
+    name: str
+    instructions: str
+    description: str = ""
+    when_to_use: str = ""
+    path: str | None = None
+    scripts: dict[str, str] = Field(default_factory=dict)  # filename -> abs path
+
+
+# --- Approval gates (SPEC §6.10) -------------------------------------------
+
+
+class ApprovalRequest(BaseModel):
+    """Emitted when a permission gate pauses the graph for human approval."""
+
+    request_id: str = Field(default_factory=lambda: str(uuid4()))
+    gate: str  # name of the gate that fired
+    action: str  # human-readable description of the action awaiting approval
+    reason: str  # why this gate paused (which threshold/condition tripped)
+    risk: Literal["low", "medium", "high"] = "medium"
+    payload: dict[str, Any] = Field(default_factory=dict)  # action-specific detail
+
+
+class ApprovalResponse(BaseModel):
+    """The user's decision unblocking a paused gate."""
+
+    request_id: str
+    approved: bool
+    note: str | None = None
+
+
 __all__ = [
     "MimeType",
     "BudgetSpec",
@@ -105,4 +161,8 @@ __all__ = [
     "ToolResult",
     "MemoryItem",
     "LLMCallRecord",
+    "SkillManifest",
+    "Skill",
+    "ApprovalRequest",
+    "ApprovalResponse",
 ]

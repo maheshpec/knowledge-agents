@@ -17,6 +17,7 @@ from knowledge_index.retrieval.post import (
     MMRDiversifier,
     ParentExpander,
     PostProcessor,
+    SpanExtractor,
 )
 from knowledge_index.retrieval.query_ops import (
     Decomposer,
@@ -76,5 +77,6 @@ __all__ = [
     "MMRDiversifier",
     "ParentExpander",
     "DeduplicatorPostProcessor",
+    "SpanExtractor",
     "DEFAULT_MMR_LAMBDA",
 ]

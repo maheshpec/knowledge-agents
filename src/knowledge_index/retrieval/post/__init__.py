@@ -8,6 +8,7 @@ from knowledge_index.retrieval.post.mmr import (
     MMRDiversifier,
 )
 from knowledge_index.retrieval.post.parent import FetchParentFn, ParentExpander
+from knowledge_index.retrieval.post.span import SpanExtractor
 
 __all__ = [
     "PostProcessor",
@@ -18,4 +19,5 @@ __all__ = [
     "MMRDiversifier",
     "FetchParentFn",
     "ParentExpander",
+    "SpanExtractor",
 ]

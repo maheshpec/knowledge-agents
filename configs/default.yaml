@@ -30,6 +30,14 @@ orchestrator:
   compaction_threshold: 120000  # token count that triggers compaction (SPEC §6.1)
   citation_strictness: strict   # strict | loose | off (SPEC §6.13)
 
+permissions:
+  # Approval gates (SPEC §6.10). gate_budget_threshold lives under `budget` above.
+  max_concurrent_subagents: 3   # ConcurrencyGate cap on parallel sub-agents
+
+skills:
+  root: src/skills            # where SkillRegistry.discover walks for SKILL.md
+  select_k: 2                 # top-k skills injected per step
+
 # Knowledge-index pipeline (Phase 1B+ fills these in; defaults match SPEC §10).
 index:
   chunker:
