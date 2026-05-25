@@ -98,7 +98,9 @@ class MemoryExtractor:
                 messages=[{"role": "user", "content": text}],
             )
 
-        resp = await instrumented_call(self.model, _call, trace_id=trace_id, extract_text=lambda r: "")
+        resp = await instrumented_call(
+            self.model, _call, trace_id=trace_id, extract_text=lambda r: ""
+        )
         self.last_cost = resp.record.cost_usd
         for block in getattr(resp.raw, "content", []):
             if getattr(block, "type", "") == "tool_use" and block.name == _TOOL_NAME:

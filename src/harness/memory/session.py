@@ -33,9 +33,14 @@ class SessionMemory:
         self.session_id = session_id
         self.max_items = max_items
         self._path = Path(path)
-        if str(self._path) != ":memory:" and self._path.parent and str(self._path.parent) not in (
-            "",
-            ".",
+        if (
+            str(self._path) != ":memory:"
+            and self._path.parent
+            and str(self._path.parent)
+            not in (
+                "",
+                ".",
+            )
         ):
             self._path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(self._path), check_same_thread=False)

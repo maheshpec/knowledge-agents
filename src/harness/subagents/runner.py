@@ -43,7 +43,11 @@ async def _run(task: SubAgentTask, child: BudgetTracker, agent_fn: AgentFn) -> S
             # Coerce/validate into the requested schema (fail loudly if it can't).
             result = task.return_schema.model_validate(result.model_dump())
         return SubAgentResult(
-            task=task.task, ok=True, output=result.model_dump(), trace_id=trace_id, cost=child.consumed
+            task=task.task,
+            ok=True,
+            output=result.model_dump(),
+            trace_id=trace_id,
+            cost=child.consumed,
         )
     except Exception as exc:  # noqa: BLE001 - sub-agent failure is data, not a crash
         _log.warning("subagent.failed", task=task.task, error=str(exc), trace_id=trace_id)
@@ -53,7 +57,9 @@ async def _run(task: SubAgentTask, child: BudgetTracker, agent_fn: AgentFn) -> S
 
 
 @traced(span_name="subagents.spawn")
-async def spawn(task: SubAgentTask, parent_budget: BudgetTracker, agent_fn: AgentFn) -> SubAgentResult:
+async def spawn(
+    task: SubAgentTask, parent_budget: BudgetTracker, agent_fn: AgentFn
+) -> SubAgentResult:
     """Spawn a single sub-agent with a clean context and a carved child budget."""
     child = _carve_child(parent_budget, task)
     return await _run(task, child, agent_fn)

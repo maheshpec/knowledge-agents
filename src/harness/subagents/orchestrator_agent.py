@@ -11,22 +11,22 @@ The returned model is the orchestrator's :class:`GenerationResult`; set
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import uuid4
 
 from harness.budget.tracker import BudgetTracker
+from harness.orchestrator.state import OrchestratorDeps
 from harness.subagents.base import AgentFn, SubAgentTask
 
 
-def orchestrator_agent_fn(deps: object, *, k: int = 10, max_hops: int = 1) -> AgentFn:
+def orchestrator_agent_fn(deps: OrchestratorDeps, *, k: int = 10, max_hops: int = 1) -> AgentFn:
     """Build an :data:`AgentFn` that runs a fresh orchestrator per task."""
 
-    async def _run(task: SubAgentTask, child: BudgetTracker):  # type: ignore[no-untyped-def]
+    async def _run(task: SubAgentTask, child: BudgetTracker) -> Any:
         from harness.orchestrator.graph import build_orchestrator, initial_state
 
         app = build_orchestrator(deps)  # fresh LangGraph instance per sub-agent
-        state = initial_state(
-            task.task, budget_usd=child.available(), k=k, max_hops=max_hops
-        )
+        state = initial_state(task.task, budget_usd=child.available(), k=k, max_hops=max_hops)
         cfg = {"configurable": {"thread_id": str(uuid4())}}
         final = await app.ainvoke(state, cfg)
         result = final["result"]
