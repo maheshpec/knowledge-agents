@@ -61,6 +61,23 @@ async def test_acl_enforced_via_payload_filter():
     assert "pub" in ids_bob  # empty-acl chunk is public
 
 
+async def test_acl_filter_key_from_retrieval_layer():
+    # Phase 1C retrievers pass principals under the "acl" key (not "user_principals").
+    chunks = [
+        Chunk(chunk_id="priv", doc_id="d1", text="secret budget numbers", acl=["alice"]),
+        Chunk(chunk_id="pub", doc_id="d2", text="public budget overview", acl=[]),
+    ]
+    index, emb = await _make_index(chunks)
+    qvec = await emb.embed_query("budget")
+
+    alice = await index.search_dense(qvec, k=10, filters={"acl": ["alice"]})
+    assert {c.chunk.chunk_id for c in alice} == {"priv", "pub"}
+
+    # Anonymous request (empty principals) must still hide private chunks — no leak.
+    anon = await index.search_dense(qvec, k=10, filters={"acl": []})
+    assert {c.chunk.chunk_id for c in anon} == {"pub"}
+
+
 async def test_doc_id_filter():
     chunks = [
         Chunk(chunk_id="c1", doc_id="d1", text="alpha content here"),

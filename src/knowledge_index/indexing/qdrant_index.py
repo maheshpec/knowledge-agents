@@ -146,7 +146,16 @@ class QdrantIndex:
         from qdrant_client import models as m
 
         filters = dict(filters or {})
-        principals = filters.pop("user_principals", None)
+        # The retrieval layer (SPEC §7.6.3, ka-2ap) passes requesting principals
+        # under the "acl" key; Phase 1B's own callers/tests use "user_principals".
+        # Treat both as the requesting principal set so the two convoys integrate.
+        # Presence of EITHER key means "enforce ACL" — even an empty principal set
+        # must still hide private chunks (only public/empty-acl chunks stay visible).
+        acl_enforced = "user_principals" in filters or "acl" in filters
+        principals: list[str] = []
+        principals += filters.pop("user_principals", None) or []
+        principals += filters.pop("acl", None) or []
+
         must: list[Any] = []
         for key, value in filters.items():
             payload_key = "doc_id" if key == "doc_id" else f"chunk.metadata.{key}"
@@ -154,15 +163,13 @@ class QdrantIndex:
                 must.append(m.FieldCondition(key=payload_key, match=m.MatchAny(any=value)))
             else:
                 must.append(m.FieldCondition(key=payload_key, match=m.MatchValue(value=value)))
-        if principals:
-            # ACL: principal intersects chunk.acl, OR chunk is public (empty acl).
-            acl_filter = m.Filter(
-                should=[
-                    m.FieldCondition(key="acl", match=m.MatchAny(any=list(principals))),
-                    m.IsEmptyCondition(is_empty=m.PayloadField(key="acl")),
-                ]
-            )
-            must.append(acl_filter)
+        if acl_enforced:
+            # Visible iff chunk is public (empty acl) OR a principal intersects its
+            # acl. With no principals, only public chunks pass — never a leak.
+            should: list[Any] = [m.IsEmptyCondition(is_empty=m.PayloadField(key="acl"))]
+            if principals:
+                should.append(m.FieldCondition(key="acl", match=m.MatchAny(any=principals)))
+            must.append(m.Filter(should=should))
         return m.Filter(must=must) if must else None
 
     # --- read path --------------------------------------------------------
