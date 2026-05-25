@@ -36,6 +36,16 @@ dev = [
 eval = [
     "ragas>=0.2",
 ]
+# Heavy parsers + the OpenAI fallback SDK. Imported lazily by the ingestion and
+# embedding layers (SPEC §7.1, §7.4) so the core install and unit tests don't
+# need them; install when ingesting real PDFs/DOCX/HTML.
+ingest = [
+    "pymupdf4llm>=0.0.17",
+    "pymupdf>=1.24",
+    "trafilatura>=1.12",
+    "python-docx>=1.1",
+    "openai>=1.40",
+]
 
 [build-system]
 requires = ["hatchling"]
