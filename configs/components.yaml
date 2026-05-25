@@ -1,0 +1,52 @@
+# Component registry (SPEC §8.1) — the bounded search space for the
+# self-improvement loop. The ONLY place the evolutionary loop may pull
+# components from; new techniques enter via human PRs to this file.
+#
+# Phase 1A ships the registry skeleton matching SPEC §8.1. Component classes are
+# wired up as later phases implement them.
+
+chunkers:
+  - name: recursive
+    class: knowledge_index.chunking.RecursiveChunker
+    params:
+      chunk_size: {type: int, range: [200, 1500], default: 500}
+      chunk_overlap: {type: int, range: [0, 200], default: 75}
+  - name: semantic
+    class: knowledge_index.chunking.SemanticChunker
+    params:
+      threshold: {type: float, range: [0.5, 0.95], default: 0.75}
+
+enrichers:
+  - name: "null"
+  - name: contextual
+    params:
+      max_context_tokens: {type: int, range: [30, 150], default: 80}
+  - name: title
+
+retrievers:
+  - name: dense
+  - name: sparse_bm25
+  - name: hybrid_rrf
+    params:
+      rrf_k: {type: int, range: [10, 200], default: 60}
+
+rerankers:
+  - name: "null"
+  - name: cohere_rerank_3
+  - name: voyage_rerank_2
+  - name: llm_rerank
+    params:
+      model: {type: enum, values: [haiku, sonnet], default: haiku}
+
+post_processors:
+  - name: mmr
+    params:
+      lambda: {type: float, range: [0.0, 1.0], default: 0.5}
+  - name: parent_expander
+  - name: span_extractor
+
+query_ops:
+  - name: rewrite
+  - name: hyde
+  - name: decompose
+  - name: stepback

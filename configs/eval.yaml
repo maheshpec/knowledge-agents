@@ -1,0 +1,21 @@
+# Evaluation configuration (SPEC §9). Phase 1A stub; Phase 2 implements runners.
+
+datasets:
+  dev:
+    path: evaluation/datasets/dev.jsonl
+    size: 500          # seen freely by the self-improvement loop
+  rotating:
+    path: evaluation/datasets/rotating.jsonl
+    size: 500          # shown only at generation boundaries
+  frozen:
+    path: evaluation/datasets/frozen.jsonl
+    size: 1000         # NEVER shown to the loop; final verification only
+
+metrics:
+  retrieval: [recall@5, recall@10, recall@20, precision@10, ndcg@10, mrr, hit_rate]
+  end_to_end: [faithfulness, answer_relevance, citation_precision, citation_recall]
+  operational: [latency_p50, latency_p95, cost_per_query, token_efficiency]
+
+runner:
+  log_to_langsmith: true
+  concurrency: 8

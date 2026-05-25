@@ -1,0 +1,23 @@
+# Self-improvement (evolutionary) loop configuration (SPEC §8). Phase 1A stub;
+# Phase 4 implements the loop, reviewer, PR generator, and budget guard.
+
+evolution:
+  generations: 5
+  population_size: 8
+  mutation_rate: 0.3
+  crossover_rate: 0.3
+  improvement_threshold_ndcg10: 0.02  # +2% nDCG@10 to qualify (SPEC §8.2)
+
+reviewer:
+  model: claude-sonnet-4-6        # same-family to start (SPEC §12); mix later
+  noise_band_std: 1.0             # reject improvements within this many seed-std
+
+budget_guard:
+  max_generations_per_run: 20
+  max_compute_hours_per_generation: 2
+  max_usd_per_run: 50
+  daily_usd_ceiling: 200
+
+ledger:
+  experiments_dir: experiments/runs
+  lineage_path: experiments/lineage.parquet

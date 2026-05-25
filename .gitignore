@@ -1,0 +1,44 @@
+# --- Secrets & config (SPEC §10.5) ---
+.env
+.env.*
+!.env.example
+
+# --- Caches & local stores ---
+.cache/
+*.sqlite
+*.duckdb
+.langsmith_cache/
+
+# --- Experiment artifacts (records are committed; large artifacts are not) ---
+experiments/runs/*/artifacts/
+
+# --- Private eval datasets (real user content) ---
+evaluation/datasets/private/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# --- Tooling caches ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- Gas Town / agent runtime (worktree-local, not project code) ---
+.beads/
+.claude/
+.runtime/
+CLAUDE.md
+
+# --- OS / editor ---
+.DS_Store
+.idea/
+.vscode/

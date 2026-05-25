@@ -1,0 +1,54 @@
+# Default pipeline + harness configuration (Hydra root).
+# Composable: override any field on the CLI, e.g.
+#   uv run scripts/eval_run.py retrieval.reranker=null
+#
+# This is a Phase 1A stub; later phases flesh out each section.
+
+defaults:
+  - _self_
+
+llm:
+  generation_model: claude-sonnet-4-6
+  fast_model: claude-haiku-4-5-20251001
+  fallback_provider: openai  # used only if Anthropic unavailable
+
+budget:
+  max_usd: 1.0
+  gate_budget_threshold: 0.25  # approval gate above this per-call spend (SPEC §6.10)
+
+cache:
+  embedding_cache_path: .cache/embeddings.sqlite
+  retrieval_ttl_seconds: 300
+  retrieval_max_size: 1024
+
+observability:
+  log_level: INFO
+  json_logs: true
+  langsmith_project: knowledge-agent
+
+orchestrator:
+  compaction_threshold: 120000  # token count that triggers compaction (SPEC §6.1)
+  citation_strictness: strict   # strict | loose | off (SPEC §6.13)
+
+# Knowledge-index pipeline (Phase 1B+ fills these in; defaults match SPEC §10).
+index:
+  chunker:
+    name: recursive
+    chunk_size: 500
+    chunk_overlap: 75
+  enricher:
+    name: contextual
+    max_context_tokens: 80
+  embedder:
+    name: voyage-3-large
+    dim: 1024
+  retrieval:
+    retrievers: [dense, sparse_bm25]
+    fusion:
+      name: rrf
+      rrf_k: 60
+    reranker:
+      name: cohere_rerank_3
+      top_k: 10
+    post_processors: [mmr, parent_expander]
+    query_ops: [rewrite]
