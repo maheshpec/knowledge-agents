@@ -81,13 +81,13 @@ Build a production-grade knowledge agent harness composed of:
 | Layer | Choice | Why |
 |---|---|---|
 | Language | Python 3.11+ | LangChain ecosystem |
-| Orchestration | **LangGraph** | Stateful, checkpointed, supports HITL, sub-graphs for sub-agents |
+| Orchestration | **LangGraph** ≥ 0.2 | Stateful, checkpointed, supports HITL, sub-graphs for sub-agents. Pin in `pyproject.toml`; checkpointer moved to `langgraph-checkpoint-sqlite` package — import via `from langgraph.checkpoint.sqlite import SqliteSaver` after installing both packages |
 | Primitives | **LangChain** | Splitters, retrievers, embedders, ensemble retriever (RRF), document loaders |
 | Observability | **LangSmith** + OpenTelemetry | Traces, eval runs, A/B comparisons |
-| LLM | **Anthropic Claude** (primary), OpenAI (fallback / cheap routing) | Prompt caching crucial for contextual retrieval |
-| Embeddings | **Voyage** (`voyage-3-large`) or `text-embedding-3-large` | Configurable; benchmarked per corpus |
-| Vector store | **Qdrant** | Hybrid (dense + BM25) in one engine, payload filtering, snapshots |
-| Sparse | Qdrant BM25 or `rank_bm25` fallback | |
+| LLM | **Anthropic Claude** (primary) | `claude-sonnet-4-6` for generation/synthesis, `claude-haiku-4-5-20251001` for routing/classification/cheap calls. OpenAI fallback only if Anthropic unavailable. Prompt caching crucial for contextual retrieval (see §6.12) |
+| Embeddings | **Voyage** (`voyage-3-large`, 1024-dim) primary; `text-embedding-3-large` (3072-dim) fallback | Configurable; bake-off on dev set before locking in |
+| Vector store | **Qdrant** ≥ 1.10 | Hybrid (dense + sparse) in one collection via named vectors; payload filtering; snapshots |
+| Sparse | **Qdrant + `fastembed` sparse model** (e.g. `Qdrant/bm25`) — note: Qdrant has no native BM25 statistics; `fastembed` ships a precomputed BM25-style sparse encoder. If recall is unacceptable on the dev set, fall back to `rank_bm25` over a parallel sidecar index. Phase 1 risk: bake off both during ingestion of dev corpus | |
 | Reranker | **Cohere Rerank 3** or **Voyage rerank-2** | Cross-encoder, swappable via registry |
 | Graph store | **Neo4j** (or `networkx` for dev) | For GraphRAG route |
 | Sandbox | **Docker** containers via `docker-py`, with `firejail` fallback | Tool execution isolation |
@@ -172,10 +172,14 @@ knowledge-agent/
 ├── experiments/                     # versioned experiment ledger (committed to git)
 │   ├── runs/
 │   └── lineage.parquet
-└── scripts/
-    ├── ingest.py
-    ├── eval_run.py
-    └── self_improve_run.py
+├── scripts/
+│   ├── ingest.py
+│   ├── eval_run.py
+│   └── self_improve_run.py
+└── .github/
+    └── workflows/
+        ├── ci.yaml                  # ruff + mypy + pytest unit/integration
+        └── eval.yaml                # nightly retrieval + e2e eval suite on dev set
 ```
 
 ---
@@ -362,7 +366,7 @@ Three layers:
 
 1. **Working memory** — current turn's scratchpad. In-process dict; cleared per turn.
 2. **Session memory** — last N turns + extracted facts. SQLite via LangGraph checkpointer.
-3. **Long-term memory** — durable user/project facts. Stored as a vector index (reuse the knowledge index infrastructure with a separate namespace).
+3. **Long-term memory** — durable user/project facts. Stored as a vector index. **Use a separate Qdrant collection** (`ka_memory_longterm`), not a payload-filter namespace within the main corpus collection. Reasons: (a) ACL surface area differs — memory is per-user, corpus is shared with principals; (b) reindexing the main corpus shouldn't disturb memory; (c) snapshot/restore cycles run on different cadences. Reuse the same embedder, embedding cache, and retrieval interfaces.
 
 **Interface:**
 
@@ -562,6 +566,25 @@ The `finalize` step in the orchestrator graph runs the citation enforcer.
 
 **Approach:** structured generation. The model is constrained to output text in segments, each tagged with a citation ID drawn from the retrieved candidate set. Segments without backing candidates either get flagged or removed (configurable).
 
+**Generation schema** (enforced via Anthropic tool-use / JSON-mode):
+
+```python
+class CitedSegment(BaseModel):
+    text: str                       # one claim or contiguous span of supported text
+    citation_ids: list[str]         # chunk_ids from the candidate set; [] means uncited
+    confidence: Literal["high","medium","low"] = "high"
+
+class CitedDraft(BaseModel):
+    segments: list[CitedSegment]
+    refused: bool = False           # set true if the model declines (e.g., no evidence at all)
+    refusal_reason: str | None = None
+```
+
+The model is given the candidate set as `[{chunk_id, text}, ...]` and must emit a `CitedDraft`. The enforcer then:
+1. Validates every `citation_ids` entry references a candidate that was actually in the set (no hallucinated IDs).
+2. Re-flows the segments into final prose, computing `claim_span` offsets for each `Citation`.
+3. Applies strictness policy.
+
 **Interface:**
 
 ```python
@@ -574,7 +597,7 @@ class CitationEnforcer:
     ) -> GenerationResult: ...
 ```
 
-In `strict` mode, any unsupported claim either gets removed or returned with an error. In `loose` mode, unsupported claims are tagged as `[uncited]` for the UI to render differently.
+In `strict` mode, any unsupported claim either gets removed or returned with an error. In `loose` mode, unsupported claims are tagged as `[uncited]` for the UI to render differently. In `off` mode, the enforcer is bypassed (use only for offline evaluation runs that score citations separately).
 
 ---
 
@@ -1195,6 +1218,44 @@ Build in this order. Each phase is shippable and adds capability.
 - Budget guard.
 
 **Acceptance:** Run the loop end-to-end on the dev set; it surfaces ≥1 improvement that holds up on the rotating set and clears reviewer; opens a PR; human merges.
+
+---
+
+## 10.5 Secrets & Config Hygiene
+
+API keys, dataset paths, and infra endpoints are runtime-only. Conventions:
+
+- All secrets read from `os.environ` via a typed `Settings` model (`pydantic-settings`). No literal API keys anywhere in the repo.
+- `.env.example` lists every required env var with placeholder values, grouped by service:
+  - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` (fallback)
+  - `VOYAGE_API_KEY`, `COHERE_API_KEY`
+  - `QDRANT_URL`, `QDRANT_API_KEY` (or `QDRANT_HOST`/`QDRANT_PORT` for self-hosted)
+  - `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`
+  - `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD` (Phase 3)
+- `.gitignore` excludes: `.env`, `.env.*`, `experiments/runs/*/artifacts/`, `*.sqlite`, `*.duckdb`, `.langsmith_cache/`.
+- CI uses GitHub Actions secrets, not committed values.
+- `pre-commit` hooks run `gitleaks` (or `trufflehog`) on every commit; CI runs the same scan on PRs.
+- Eval datasets that contain real user content are gitignored under `evaluation/datasets/private/`; only synthetic / public datasets ship in the repo.
+
+The `Settings` model:
+
+```python
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    anthropic_api_key: str
+    openai_api_key: str | None = None
+    voyage_api_key: str
+    cohere_api_key: str
+    qdrant_url: str = "http://localhost:6333"
+    qdrant_api_key: str | None = None
+    langsmith_api_key: str | None = None
+    langsmith_project: str = "knowledge-agent"
+```
+
+Instantiated once at process start; passed via dependency injection. Never re-read inside hot paths.
 
 ---
 
