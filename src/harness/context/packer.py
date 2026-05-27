@@ -53,6 +53,24 @@ class DefaultPacker:
     ) -> None:
         self._evidence_header = evidence_header
 
+    def render_preamble(self, skills: list[Skill], memory_hits: list[MemoryItem]) -> str:
+        """Render selected skills + memory hits as a guidance preamble (SPEC §6.6).
+
+        Used by the orchestrator's answer step to put Phase 2 context (the skills
+        the registry selected for this query's intent, and any long-term memory
+        hits) in front of the question, in the same order ``pack`` would place
+        them. Returns an empty string when neither is present.
+        """
+        blocks: list[str] = []
+        if skills:
+            blocks.append(
+                "\n\n".join(f"## Skill: {s.name}\n{s.instructions}" for s in skills)
+            )
+        if memory_hits:
+            mem = "\n".join(f"- {item.key}: {item.value}" for item in memory_hits)
+            blocks.append(f"Relevant memory:\n{mem}")
+        return "\n\n".join(blocks)
+
     def fit_candidates(
         self, candidates: list[RetrievalCandidate], budget_tokens: int
     ) -> list[RetrievalCandidate]:

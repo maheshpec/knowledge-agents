@@ -1,8 +1,10 @@
 """Harness entry point (SPEC §6.1, §14).
 
 ``answer()`` is the one-call public API: it wires Settings → the knowledge index
-(Convoy B) → the retrieval pipeline (Convoy C) → the orchestrator graph and runs
-a single question to a cited :class:`GenerationResult`.
+(Convoy B) → the retrieval pipeline (Convoy C) → the full Phase 2 orchestrator
+graph and runs a single question to a cited :class:`GenerationResult`. By default
+it uses the Phase 2 stack: a Plan-and-Execute planner, the query router, skills,
+long-term memory, compaction, permission gates, and clean-context sub-agents.
 
 All heavy wiring is imported lazily inside the functions so that importing light
 submodules (``harness.cache``, ``harness.observability``) stays cheap and free of

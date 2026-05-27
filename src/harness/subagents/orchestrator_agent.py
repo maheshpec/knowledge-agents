@@ -23,10 +23,18 @@ def orchestrator_agent_fn(deps: OrchestratorDeps, *, k: int = 10, max_hops: int 
     """Build an :data:`AgentFn` that runs a fresh orchestrator per task."""
 
     async def _run(task: SubAgentTask, child: BudgetTracker) -> Any:
+        import dataclasses
+
         from harness.orchestrator.graph import build_orchestrator, initial_state
 
-        app = build_orchestrator(deps)  # fresh LangGraph instance per sub-agent
-        state = initial_state(task.task, budget_usd=child.available(), k=k, max_hops=max_hops)
+        # A sub-agent must not itself delegate — that risks unbounded recursion
+        # (SPEC §6.4 clean-context delegation). Disable delegation in the child's
+        # deps while keeping every other component (router, retrieval, skills).
+        child_deps = dataclasses.replace(deps, allow_delegation=False)
+        app = build_orchestrator(child_deps)  # fresh LangGraph instance per sub-agent
+        state = initial_state(
+            task.task, budget_usd=child.available(), k=k, max_hops=max_hops, delegation_depth=1
+        )
         cfg = {"configurable": {"thread_id": str(uuid4())}}
         final = await app.ainvoke(state, cfg)
         result = final["result"]
