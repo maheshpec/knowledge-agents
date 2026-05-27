@@ -21,7 +21,7 @@ from common.schemas import (
     RetrievalCandidate,
     RetrievalResult,
 )
-from common.types import MemoryItem, Skill, SkillManifest
+from common.types import MemoryItem, Skill, SkillManifest, ToolCall, ToolResult
 from harness.citation.base import CitedDraft, Strictness
 from harness.citation.enforcer import CitationEnforcer
 from harness.context.packer import DefaultPacker
@@ -37,6 +37,8 @@ if TYPE_CHECKING:
     from harness.compaction.base import Compactor
     from harness.memory.manager import LayeredMemory
     from harness.permissions.base import Gate
+    from harness.sandbox.base import SandboxPolicy, Tool
+    from harness.sandbox.executor import SandboxedToolExecutor
     from harness.skills.registry import SkillRegistry
     from harness.subagents.base import AgentFn
     from knowledge_index.retrieval.routers.base import QueryRouter
@@ -91,6 +93,11 @@ class OrchestratorState(TypedDict, total=False):
     approval: dict | None
     approval_denied: bool
     active_subagents: int
+    # Tool execution (SPEC §6.7): calls queued for the sandbox + their results.
+    # The ``tool`` node drains ``pending_tool_calls`` through the executor so no
+    # tool runs unsandboxed; results accumulate for the answer step.
+    pending_tool_calls: list[ToolCall]
+    tool_results: list[ToolResult]
 
 
 @dataclass
@@ -140,6 +147,15 @@ class OrchestratorDeps:
     # USD ceiling carved per delegated sub-agent.
     subagent_budget_usd: float = 0.25
     max_delegation_depth: int = 1
+
+    # Sandbox (F, SPEC §6.7): the executor is the only way tools run. ``tools``
+    # maps tool name -> Tool so the tool node can resolve a queued call. When
+    # ``require_sandbox`` is set, building a graph with tools but no executor
+    # raises — the production guard against unsandboxed execution (§13).
+    tool_executor: SandboxedToolExecutor | None = None
+    tools: dict[str, Tool] = field(default_factory=dict)
+    tool_policies: dict[str, SandboxPolicy] = field(default_factory=dict)
+    require_sandbox: bool = False
 
     extra: dict = field(default_factory=dict)
 

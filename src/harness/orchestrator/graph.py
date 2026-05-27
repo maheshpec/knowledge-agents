@@ -22,6 +22,7 @@ loop, so Phase 1 callers are unaffected.
 
 from __future__ import annotations
 
+from collections.abc import Hashable
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -116,6 +117,15 @@ def build_orchestrator(deps: OrchestratorDeps, *, checkpointer: Any = None) -> A
     (SPEC §6.1 — the async-correct SqliteSaver variant).
     """
 
+    # Production guard (SPEC §6.7, §13): tools must run through the sandbox. If
+    # tools are registered but no executor is wired and the deployment requires
+    # sandboxing, refuse to build the graph rather than run a tool unsandboxed.
+    if deps.require_sandbox and deps.tools and deps.tool_executor is None:
+        raise ValueError(
+            "require_sandbox=True with registered tools but no tool_executor: "
+            "tools would run unsandboxed (SPEC §6.7)"
+        )
+
     @traced(span_name="orchestrator.plan")
     async def plan_node(state: OrchestratorState) -> dict:
         ctx = PlanningContext(
@@ -169,6 +179,11 @@ def build_orchestrator(deps: OrchestratorDeps, *, checkpointer: Any = None) -> A
         return bool(delegatable_steps(state.get("plan")))
 
     def route_decision(state: OrchestratorState) -> str:
+        # Drain any queued tool calls first: a pending call must execute (in the
+        # sandbox) before we spend budget or answer (SPEC §6.7).
+        if deps.tool_executor is not None and state.get("pending_tool_calls"):
+            _log.info("orchestrator.route", decision="tool")
+            return "tool"
         if state["budget_remaining"] <= MIN_ANSWER_BUDGET:
             _log.info("orchestrator.route", decision="answer", reason="budget_exhausted")
             return "answer"
@@ -251,6 +266,33 @@ def build_orchestrator(deps: OrchestratorDeps, *, checkpointer: Any = None) -> A
             "pending_action": None,
             "budget_remaining": max(0.0, state["budget_remaining"] - spent),
         }
+
+    @traced(span_name="orchestrator.tool")
+    async def tool_node(state: OrchestratorState) -> dict:
+        """Execute queued tool calls through the sandbox (SPEC §6.7).
+
+        Every call is dispatched via :class:`SandboxedToolExecutor`, which
+        enforces the per-tool policy and logs the call (policy, args, result
+        hash). An unknown tool yields a failed ``ToolResult`` rather than raising,
+        so one bad call never crashes the graph. The queue is cleared so the next
+        ``route`` does not re-run it.
+        """
+        executor = deps.tool_executor
+        assert executor is not None  # guarded by route_decision
+        from common.types import ToolResult
+
+        results = list(state.get("tool_results", []))
+        for call in state.get("pending_tool_calls", []):
+            tool = deps.tools.get(call.tool)
+            if tool is None:
+                results.append(
+                    ToolResult(tool=call.tool, ok=False, error=f"unknown tool {call.tool!r}")
+                )
+                continue
+            policy = deps.tool_policies.get(call.tool)
+            results.append(await executor.execute(tool, call.args, policy=policy))
+        _log.info("orchestrator.tool", executed=len(state.get("pending_tool_calls", [])))
+        return {"tool_results": results, "pending_tool_calls": []}
 
     @traced(span_name="orchestrator.gate")
     async def gate_node(state: OrchestratorState) -> dict:
@@ -357,14 +399,20 @@ def build_orchestrator(deps: OrchestratorDeps, *, checkpointer: Any = None) -> A
     graph.add_edge("plan", "context")
     graph.add_edge("context", "route")
 
-    # ``route`` fans out to retrieve / sub-agent / answer. The "sub-agent" branch
-    # passes through the permission gate first when gates are configured.
+    # ``route`` fans out to retrieve / sub-agent / answer (+ tool when a sandbox
+    # executor is wired). The "sub-agent" branch passes through the permission
+    # gate first when gates are configured.
     subagent_target = "gate" if deps.gates else "sub_agent"
-    graph.add_conditional_edges(
-        "route",
-        route_decision,
-        {"retrieve": "retrieve", "sub-agent": subagent_target, "answer": "answer"},
-    )
+    route_targets: dict[Hashable, str] = {
+        "retrieve": "retrieve",
+        "sub-agent": subagent_target,
+        "answer": "answer",
+    }
+    if deps.tool_executor is not None:
+        graph.add_node("tool", tool_node)
+        graph.add_edge("tool", "observe")
+        route_targets["tool"] = "tool"
+    graph.add_conditional_edges("route", route_decision, route_targets)
     graph.add_edge("retrieve", "observe")
     graph.add_edge("sub_agent", "observe")
 
@@ -436,6 +484,8 @@ def initial_state(
         approval=None,
         approval_denied=False,
         active_subagents=0,
+        pending_tool_calls=[],
+        tool_results=[],
     )
 
 

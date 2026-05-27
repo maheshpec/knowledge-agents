@@ -37,6 +37,12 @@ dev = [
 eval = [
     "ragas>=0.2",
 ]
+# Ephemeral-container tool sandbox (SPEC §6.7). Imported lazily by
+# harness.sandbox.docker so the core install and unit tests (which use the
+# in-process LocalSandbox) need neither the SDK nor a running daemon.
+sandbox = [
+    "docker>=7.0",
+]
 # Heavy parsers + the OpenAI fallback SDK. Imported lazily by the ingestion and
 # embedding layers (SPEC §7.1, §7.4) so the core install and unit tests don't
 # need them; install when ingesting real PDFs/DOCX/HTML.
