@@ -14,6 +14,7 @@ from knowledge_index.retrieval.pipeline import HybridPipeline, build_default_pip
 from knowledge_index.retrieval.post import (
     DEFAULT_MMR_LAMBDA,
     DeduplicatorPostProcessor,
+    LostInTheMiddleReorder,
     MMRDiversifier,
     ParentExpander,
     PostProcessor,
@@ -77,6 +78,7 @@ __all__ = [
     "MMRDiversifier",
     "ParentExpander",
     "DeduplicatorPostProcessor",
+    "LostInTheMiddleReorder",
     "SpanExtractor",
     "DEFAULT_MMR_LAMBDA",
 ]

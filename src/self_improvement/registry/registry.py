@@ -190,6 +190,8 @@ def _build_reranker(name: str, params: dict[str, Any], deps: RegistryDeps) -> An
 
 def _build_post(name: str, params: dict[str, Any], deps: RegistryDeps) -> Any:
     from knowledge_index.retrieval import (
+        DeduplicatorPostProcessor,
+        LostInTheMiddleReorder,
         MMRDiversifier,
         ParentExpander,
         SpanExtractor,
@@ -201,7 +203,11 @@ def _build_post(name: str, params: dict[str, Any], deps: RegistryDeps) -> Any:
     if name == "parent_expander":
         return ParentExpander(deps.require("fetch_parent", for_component=name))
     if name == "span_extractor":
-        return SpanExtractor()
+        return SpanExtractor(max_sentences=params.get("max_sentences", 3))
+    if name == "lost_in_the_middle":
+        return LostInTheMiddleReorder()
+    if name == "deduplicator":
+        return DeduplicatorPostProcessor()
     raise RegistryError(f"no builder for post_processor '{name}'")
 
 
@@ -211,11 +217,11 @@ def _build_query_op(name: str, params: dict[str, Any], deps: RegistryDeps) -> An
     if name == "rewrite":
         return Rewriter(complete=deps.completer)
     if name == "hyde":
-        return HyDEExpander()
+        return HyDEExpander(complete=deps.completer)
     if name == "decompose":
-        return Decomposer()
+        return Decomposer(complete=deps.completer)
     if name == "stepback":
-        return Stepback()
+        return Stepback(complete=deps.completer)
     raise RegistryError(f"no builder for query_op '{name}'")
 
 

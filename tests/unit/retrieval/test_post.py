@@ -1,12 +1,14 @@
-"""Tests for post-processors: MMR, parent expansion, dedup (SPEC §7.6.6)."""
+"""Tests for post-processors: MMR, parent, dedup, reorder, spans (SPEC §7.6.6)."""
 
 import pytest
 
 from common.schemas import Chunk, Query, RetrievalCandidate
 from knowledge_index.retrieval.post import (
     DeduplicatorPostProcessor,
+    LostInTheMiddleReorder,
     MMRDiversifier,
     ParentExpander,
+    SpanExtractor,
 )
 from knowledge_index.retrieval.post.base import cosine
 
@@ -108,3 +110,68 @@ async def test_deduplicator_by_id_and_text(make_chunk_fn):
     ids = [c.chunk.chunk_id for c in out]
     assert ids == ["a", "u"]
     assert [c.rank for c in out] == [1, 2]
+
+
+# --- lost-in-the-middle reorder ---
+
+
+@pytest.mark.asyncio
+async def test_lost_in_the_middle_puts_best_at_both_ends(make_chunk_fn):
+    # Ranked best->worst: 1,2,3,4,5. Expect best (1) at top, 2nd (2) at bottom,
+    # weakest (5) buried in the middle.
+    cands = [_cand(make_chunk_fn(str(i), f"t{i}"), 1.0 - i * 0.1, i) for i in range(1, 6)]
+    out = await LostInTheMiddleReorder().process(Query(raw="q"), cands)
+    ids = [c.chunk.chunk_id for c in out]
+    assert ids == ["1", "3", "5", "4", "2"]
+    assert out[0].chunk.chunk_id == "1"  # most relevant at top
+    assert out[-1].chunk.chunk_id == "2"  # next most relevant at bottom
+    assert [c.rank for c in out] == [1, 2, 3, 4, 5]  # ranks renumbered
+
+
+@pytest.mark.asyncio
+async def test_lost_in_the_middle_noop_for_small_sets(make_chunk_fn):
+    cands = [_cand(make_chunk_fn("a", "x"), 1.0, 1), _cand(make_chunk_fn("b", "y"), 0.9, 2)]
+    out = await LostInTheMiddleReorder().process(Query(raw="q"), cands)
+    assert [c.chunk.chunk_id for c in out] == ["a", "b"]  # unchanged
+
+
+# --- span extraction ---
+
+
+@pytest.mark.asyncio
+async def test_span_extractor_trims_to_relevant_window(make_chunk_fn):
+    text = (
+        "Intro about unrelated administrivia. "
+        "The mitochondria is the powerhouse of the cell. "
+        "Mitochondria generate ATP through respiration. "
+        "Closing remark about something else entirely."
+    )
+    chunk = make_chunk_fn("c1", text)
+    out = await SpanExtractor(max_sentences=2).process(
+        Query(raw="what do mitochondria generate?"), [_cand(chunk, 1.0, 1)]
+    )
+    extracted = out[0].chunk.text
+    assert "mitochondria" in extracted.lower()
+    assert "ATP" in extracted
+    assert "administrivia" not in extracted  # irrelevant intro dropped
+    # Original text and offsets preserved for traceability.
+    assert out[0].chunk.metadata["span_original_text"] == text
+    start, end = out[0].chunk.metadata["span_offsets"]
+    assert text[start:end].strip() == extracted
+
+
+@pytest.mark.asyncio
+async def test_span_extractor_keeps_chunk_when_no_overlap(make_chunk_fn):
+    text = "Alpha beta gamma. Delta epsilon zeta."
+    chunk = make_chunk_fn("c1", text)
+    out = await SpanExtractor().process(
+        Query(raw="completely unrelated terms"), [_cand(chunk, 1.0, 1)]
+    )
+    assert out[0].chunk.text == text  # untouched
+    assert "span_offsets" not in out[0].chunk.metadata
+
+
+@pytest.mark.asyncio
+async def test_span_extractor_rejects_bad_window():
+    with pytest.raises(ValueError):
+        SpanExtractor(max_sentences=0)

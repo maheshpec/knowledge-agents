@@ -62,3 +62,19 @@ async def test_contextual_enricher_caches_document_block():
 def test_build_enricher_registry():
     assert isinstance(build_enricher("title"), TitleEnricher)
     assert isinstance(build_enricher("null"), NullEnricher)
+
+
+async def test_summary_enricher_prepends_summary():
+    from knowledge_index.enrichment import SummaryEnricher
+
+    async def fake_complete(blocks):
+        return "  A one-line summary.  "
+
+    out = await SummaryEnricher(completion_fn=fake_complete).enrich(_doc(), _chunks())
+    assert out[0].context == "A one-line summary."
+
+
+def test_build_enricher_summary():
+    from knowledge_index.enrichment import SummaryEnricher
+
+    assert isinstance(build_enricher("summary"), SummaryEnricher)

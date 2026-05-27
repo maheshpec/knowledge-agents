@@ -37,6 +37,7 @@ enrichers:
     params:
       max_context_tokens: {type: int, range: [30, 150], default: 80}
   - name: title
+  - name: summary
 
 retrievers:
   - name: dense
@@ -59,6 +60,10 @@ post_processors:
       lambda: {type: float, range: [0.0, 1.0], default: 0.5}
   - name: parent_expander
   - name: span_extractor
+    params:
+      max_sentences: {type: int, range: [1, 8], default: 3}
+  - name: lost_in_the_middle
+  - name: deduplicator
 
 query_ops:
   - name: rewrite
