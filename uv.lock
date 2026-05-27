@@ -504,6 +504,20 @@ wheels = [
 ]
 
 [[package]]
+name = "docker"
+version = "7.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pywin32", marker = "sys_platform == 'win32'" },
+    { name = "requests" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/91/9b/4a2ea29aeba62471211598dac5d96825bb49348fa07e906ea930394a83ce/docker-7.1.0.tar.gz", hash = "sha256:ad8c70e6e3f8926cb8a92619b832b4ea5299e2831c14284663184e200546fa6c", size = 117834, upload-time = "2024-05-23T11:13:57.216Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e3/26/57c6fb270950d476074c087527a558ccb6f4436657314bfb6cdf484114c4/docker-7.1.0-py3-none-any.whl", hash = "sha256:c96b93b7f0a746f9e77d325bcfb87422a3d8bd4f03136ae8a85b37f1898d5fc0", size = 147774, upload-time = "2024-05-23T11:13:55.01Z" },
+]
+
+[[package]]
 name = "docstring-parser"
 version = "0.18.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1226,11 +1240,15 @@ ingest = [
     { name = "python-docx" },
     { name = "trafilatura" },
 ]
+sandbox = [
+    { name = "docker" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "aiosqlite", specifier = ">=0.20" },
     { name = "cohere", specifier = ">=5.0" },
+    { name = "docker", marker = "extra == 'sandbox'", specifier = ">=7.0" },
     { name = "fastembed", specifier = ">=0.4" },
     { name = "hydra-core", specifier = ">=1.3" },
     { name = "langchain", specifier = ">=0.3" },
@@ -1256,7 +1274,7 @@ requires-dist = [
     { name = "structlog", specifier = ">=24.0" },
     { name = "trafilatura", marker = "extra == 'ingest'", specifier = ">=1.12" },
 ]
-provides-extras = ["dev", "eval", "ingest", "graph"]
+provides-extras = ["dev", "eval", "sandbox", "ingest", "graph"]
 
 [[package]]
 name = "langchain"
