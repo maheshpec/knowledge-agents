@@ -71,7 +71,9 @@ def build_orchestrator(deps: OrchestratorDeps, *, checkpointer: Any = None) -> A
             max_hops=state["max_hops"],
             user_principals=state.get("user_principals", []),
         )
-        plan = await deps.planner.plan(state["question"], ctx)
+        # planner_mode (SPEC §6.2): 'react' acts step-at-a-time, 'todo_list'
+        # decomposes the goal up front. deps.active_planner() resolves which.
+        plan = await deps.active_planner().plan(state["question"], ctx)
         return {"plan": plan}
 
     async def route_node(state: OrchestratorState) -> dict:
@@ -110,7 +112,7 @@ def build_orchestrator(deps: OrchestratorDeps, *, checkpointer: Any = None) -> A
         scratchpad = "\n".join(filter(None, [state.get("scratchpad", ""), note]))
         plan = state.get("plan")
         if plan is not None:
-            plan = await deps.planner.adapt(plan, {"candidates": n, "failed": n == 0})
+            plan = await deps.active_planner().adapt(plan, {"candidates": n, "failed": n == 0})
         # Phase 2 seam: compaction check (if token estimate > threshold) goes here.
         return {"scratchpad": scratchpad, "plan": plan}
 

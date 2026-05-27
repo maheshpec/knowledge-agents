@@ -1,9 +1,10 @@
-"""Tests for planners (SPEC §6.2)."""
+"""Tests for the ReAct planner (SPEC §6.2).
 
-import pytest
+The Phase 2G ``TodoListPlanner`` is covered in ``test_planner.py``.
+"""
 
 from common.schemas import Plan
-from harness.planning import PlanningContext, ReactPlanner, TodoListPlanner
+from harness.planning import PlanningContext, ReactPlanner
 
 
 async def test_react_planner_returns_executing_single_step():
@@ -31,8 +32,3 @@ async def test_react_adapt_keeps_step_on_success():
     plan = await planner.plan("g", PlanningContext())
     adapted = await planner.adapt(plan, {"failed": False, "candidates": 5})
     assert adapted.steps[0].status != "failed"
-
-
-async def test_todo_planner_is_stubbed_for_phase2():
-    with pytest.raises(NotImplementedError):
-        await TodoListPlanner().plan("g", PlanningContext())

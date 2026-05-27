@@ -9,7 +9,7 @@ the graph stays picklable for ``SqliteSaver``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Protocol, TypedDict, runtime_checkable
+from typing import Literal, Protocol, TypedDict, runtime_checkable
 
 from langchain_core.messages import BaseMessage
 
@@ -68,12 +68,22 @@ class OrchestratorDeps:
     enforcer: CitationEnforcer
     packer: DefaultPacker
     planner: Planner
+    # Phase 2G: 'react' (default) plans one step at a time; 'todo_list' decomposes
+    # the goal up front via ``todo_planner``. The plan node branches on this.
+    planner_mode: Literal["react", "todo_list"] = "react"
+    todo_planner: Planner | None = None
     system_prompt: str = "You are a helpful, citation-grounded research assistant."
     # token budget handed to the packer for the evidence block
     context_budget_tokens: int = 8000
     # nominal USD reserved per answer LLM call (settled to the real cost after)
     answer_cost_estimate: float = 0.05
     extra: dict = field(default_factory=dict)
+
+    def active_planner(self) -> Planner:
+        """The planner the graph should use, per ``planner_mode`` (SPEC §6.2)."""
+        if self.planner_mode == "todo_list" and self.todo_planner is not None:
+            return self.todo_planner
+        return self.planner
 
 
 __all__ = ["OrchestratorState", "OrchestratorDeps", "SupportsRetrieve"]

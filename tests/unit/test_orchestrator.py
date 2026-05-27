@@ -105,3 +105,29 @@ async def test_runs_with_async_sqlite_checkpointer():
     # state was checkpointed under the thread id and is retrievable
     snapshot = await app.aget_state(cfg)
     assert snapshot.values["result"].text == "fact number 0"
+
+
+async def test_planner_mode_todo_list_uses_todo_planner():
+    # SPEC §6.2 / Phase 2G: planner_mode='todo_list' branches the plan node to
+    # the injected todo_planner; 'react' (default) keeps the ReAct planner.
+    import json
+
+    from harness.planning import TodoListPlanner
+
+    async def _plan_completer(prompt: str) -> str:
+        return json.dumps([{"id": "s1", "description": "find fact 0", "depends_on": []}])
+
+    pipe = FakePipeline(_cands(3))
+    deps = OrchestratorDeps(
+        pipeline=pipe,
+        enforcer=CitationEnforcer(draft_fn=_draft_top),
+        packer=DefaultPacker(),
+        planner=ReactPlanner(),
+        planner_mode="todo_list",
+        todo_planner=TodoListPlanner(_plan_completer),
+    )
+    assert deps.active_planner().name == "todo_list"
+    final = await _run(deps, budget_usd=1.0, max_hops=1, k=5)
+    plan = final["plan"]
+    assert plan.steps[0].id == "s1"  # plan came from the todo planner
+    assert final["result"].text == "fact number 0"
