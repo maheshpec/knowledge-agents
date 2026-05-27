@@ -17,6 +17,7 @@ how the set narrows.
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from common.schemas import Query, RetrievalCandidate, RetrievalResult
@@ -30,6 +31,7 @@ from knowledge_index.retrieval.post.parent import FetchParentFn, ParentExpander
 from knowledge_index.retrieval.query_ops.base import QueryOp, apply_query_ops
 from knowledge_index.retrieval.reranking.base import Reranker
 from knowledge_index.retrieval.reranking.cohere import CohereReranker, SupportsCohereRerank
+from knowledge_index.retrieval.reranking.null import NullReranker
 from knowledge_index.retrieval.retrievers.base import (
     Retriever,
     SupportsEmbedQuery,
@@ -37,7 +39,11 @@ from knowledge_index.retrieval.retrievers.base import (
     gather_retrievers,
 )
 from knowledge_index.retrieval.retrievers.dense import DenseRetriever
+from knowledge_index.retrieval.retrievers.graph import GraphRetriever
 from knowledge_index.retrieval.retrievers.sparse import SparseBM25Retriever
+
+if TYPE_CHECKING:
+    from knowledge_index.graph.base import EntityExtractor, GraphStore
 
 _log = get_logger("knowledge_index.retrieval.pipeline")
 
@@ -154,9 +160,35 @@ def build_default_pipeline(
     )
 
 
+def build_graph_variant(
+    store: "GraphStore",
+    extractor: "EntityExtractor",
+    *,
+    depth: int = 2,
+    reranker: Reranker | None = None,
+    post_processors: list[PostProcessor] | None = None,
+) -> HybridPipeline:
+    """Wire the GraphRAG strategy variant (SPEC §7.7 / strategy='graph').
+
+    A single :class:`GraphRetriever` over the KG, wrapped in the standard pipeline
+    so it returns a :class:`RetrievalResult` and drops straight into
+    :class:`~knowledge_index.retrieval.routers.pipeline.RouterPipeline`'s
+    ``variants={"graph": ...}``. Fusion is a no-op (one retriever) and the default
+    reranker is :class:`NullReranker` — graph proximity is already the score; pass
+    a cross-encoder reranker to re-order the surfaced chunks by query relevance.
+    """
+    return HybridPipeline(
+        retrievers=[GraphRetriever(store, extractor, depth=depth)],
+        reranker=reranker or NullReranker(),
+        fuser=RRFFuser(),
+        post_processors=post_processors or [],
+    )
+
+
 __all__ = [
     "DEFAULT_RETRIEVE_MULTIPLIER",
     "DEFAULT_MIN_RETRIEVE",
     "HybridPipeline",
     "build_default_pipeline",
+    "build_graph_variant",
 ]

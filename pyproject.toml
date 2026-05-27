@@ -47,6 +47,13 @@ ingest = [
     "python-docx>=1.1",
     "openai>=1.40",
 ]
+# GraphRAG stores (SPEC §7.7). The dev/eval path uses the pure-stdlib
+# InMemoryGraphStore (no extra needed); install this for the networkx graph-algo
+# view or the Neo4j prod backend.
+graph = [
+    "networkx>=3.0",
+    "neo4j>=5.0",
+]
 
 [build-system]
 requires = ["hatchling"]

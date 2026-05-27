@@ -1,4 +1,4 @@
-"""Retrievers: dense, sparse BM25, and the parallel gather harness (SPEC §7.6.3)."""
+"""Retrievers: dense, sparse BM25, graph, and the parallel gather harness (SPEC §7.6.3)."""
 
 from knowledge_index.retrieval.retrievers.base import (
     ACL_FILTER_KEY,
@@ -9,6 +9,7 @@ from knowledge_index.retrieval.retrievers.base import (
     gather_retrievers,
 )
 from knowledge_index.retrieval.retrievers.dense import DenseRetriever
+from knowledge_index.retrieval.retrievers.graph import GraphRetriever
 from knowledge_index.retrieval.retrievers.sparse import SparseBM25Retriever
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "gather_retrievers",
     "DenseRetriever",
     "SparseBM25Retriever",
+    "GraphRetriever",
 ]
