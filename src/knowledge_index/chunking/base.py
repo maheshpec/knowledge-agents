@@ -8,10 +8,15 @@ self-improvement loop (SPEC §8) can sweep its parameters.
 from __future__ import annotations
 
 import hashlib
+import re
 from typing import Any, Protocol, runtime_checkable
 
 from common.schemas import Chunk
 from knowledge_index.ingestion.base import ParsedDoc
+
+# Sentence terminator followed by whitespace. Deliberately simple (no NLP deps)
+# so sentence-based chunkers stay deterministic and import-clean.
+_SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
 
 
 @runtime_checkable
@@ -22,6 +27,15 @@ class Chunker(Protocol):
     config: dict[str, Any]
 
     def chunk(self, doc: ParsedDoc) -> list[Chunk]: ...
+
+
+def split_sentences(text: str) -> list[str]:
+    """Split text into sentences on ``.!?`` boundaries (deterministic, dep-free).
+
+    Used by the sentence-based chunkers (``sentence_window``, ``late_chunking``).
+    Blank fragments are dropped; surrounding whitespace is stripped.
+    """
+    return [s.strip() for s in _SENTENCE_BOUNDARY.split(text.strip()) if s.strip()]
 
 
 def make_chunk_id(doc_id: str, index: int, text: str) -> str:
@@ -76,4 +90,4 @@ def build_chunks(
     return chunks
 
 
-__all__ = ["Chunker", "make_chunk_id", "build_chunks"]
+__all__ = ["Chunker", "make_chunk_id", "build_chunks", "split_sentences"]
