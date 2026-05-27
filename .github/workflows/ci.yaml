@@ -41,6 +41,9 @@ jobs:
       - name: Integration tests
         run: uv run pytest tests/integration -v -m "not integration"
 
+      - name: Red-team tests (ACL / PII / prompt injection)
+        run: uv run pytest tests/redteam -v
+
   gitleaks:
     runs-on: ubuntu-latest
     steps:

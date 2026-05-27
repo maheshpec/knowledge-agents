@@ -56,12 +56,20 @@ class Retriever(Protocol):
 def build_search_filters(query: Query) -> dict[str, Any]:
     """Compose the index filter dict for ``query``, injecting ACL principals.
 
-    The caller's principals always go in under :data:`ACL_FILTER_KEY` (even when
-    empty) so the index can enforce access control uniformly. Query-level filters
-    are merged in and win on key collisions only if the caller set them.
+    The caller's principals (from the authenticated session) always go in under
+    :data:`ACL_FILTER_KEY` so the index can enforce access control uniformly.
+
+    Security: ``query.filters`` is NOT trusted to set access control. Any
+    ``acl`` / ``user_principals`` keys carried on ``query.filters`` are stripped
+    before merging, so a caller cannot widen its own principal set by smuggling
+    an ACL key through query-level filters (a privilege-escalation surface —
+    these filters can originate from query-influenced routing; see SPEC §11 #6
+    and §13). Only the authenticated ``query.user_principals`` decides visibility.
     """
-    filters: dict[str, Any] = {ACL_FILTER_KEY: list(query.user_principals)}
-    filters.update(query.filters)
+    filters: dict[str, Any] = {
+        k: v for k, v in query.filters.items() if k not in (ACL_FILTER_KEY, "user_principals")
+    }
+    filters[ACL_FILTER_KEY] = list(query.user_principals)
     return filters
 
 
