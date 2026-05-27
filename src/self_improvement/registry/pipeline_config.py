@@ -10,6 +10,8 @@ can never construct a component outside the declared search space.
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 from knowledge_index.retrieval import HybridPipeline, RRFFuser, WeightedFuser
@@ -18,8 +20,22 @@ from self_improvement.registry.registry import ComponentRegistry, RegistryDeps
 
 
 class PipelineConfig(BaseModel):
-    """A full retrieval-pipeline configuration (the evolutionary loop's genome)."""
+    """A full pipeline configuration — the evolutionary loop's genome (SPEC §8.2).
 
+    Covers the whole pipeline: index-time components (chunker + enricher) and
+    retrieval-time components (retrievers, fusion, reranker, post-processors,
+    query ops). ``pipeline_from_registry`` consumes only the retrieval-time half;
+    the index-time genes are carried so the evolutionary loop can mutate the full
+    candidate, and are applied by the ingestion pipeline at index-build time.
+    """
+
+    # Index-time genes (applied during ingestion; see SPEC §7.2-7.3).
+    chunker: str = "recursive"
+    chunker_params: dict[str, Any] = Field(default_factory=dict)
+    enricher: str = "null"
+    enricher_params: dict[str, Any] = Field(default_factory=dict)
+
+    # Retrieval-time genes.
     retrievers: list[str] = Field(default_factory=lambda: ["dense", "sparse_bm25"])
     fusion: str = "rrf"
     rrf_k: int = 60
