@@ -87,6 +87,19 @@ class GenerationResult(BaseModel):
     tokens_out: int
 
 
+class GoldQuery(BaseModel):
+    """A labelled evaluation query with its relevant chunks/docs (SPEC §9.1)."""
+
+    query_id: str
+    query: str
+    relevant_chunk_ids: list[str] = Field(default_factory=list)
+    relevant_doc_ids: list[str] = Field(default_factory=list)
+    expected_answer: str | None = None  # for end-to-end eval
+    intent: str = "lookup"
+    difficulty: Literal["easy", "medium", "hard"] = "medium"
+    notes: str = ""
+
+
 class PlanStep(BaseModel):
     """A single step within a plan, with dependencies and execution status."""
 
@@ -119,6 +132,7 @@ __all__ = [
     "RetrievalResult",
     "Citation",
     "GenerationResult",
+    "GoldQuery",
     "Plan",
     "PlanStep",
 ]

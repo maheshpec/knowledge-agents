@@ -39,6 +39,14 @@ class ConfigError(KnowledgeAgentError):
     """Raised on invalid or missing configuration."""
 
 
+class FrozenSetIsolationError(KnowledgeAgentError):
+    """Raised when evolution-mode code tries to read the frozen test set (SPEC §9.1).
+
+    The frozen set must NEVER be shown to the self-improvement loop; the dataset
+    loader enforces this by refusing to materialize it while in evolution mode.
+    """
+
+
 __all__ = [
     "KnowledgeAgentError",
     "RetrievalError",
@@ -46,4 +54,5 @@ __all__ = [
     "CitationViolation",
     "ACLDenied",
     "ConfigError",
+    "FrozenSetIsolationError",
 ]

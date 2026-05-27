@@ -1,0 +1,59 @@
+name: Eval
+
+# Retrieval + e2e evaluation suite (SPEC §9, epic ka-5ps).
+# - Nightly: full dev set, report uploaded as an artifact + baseline for the gate.
+# - On PR: a 20-query smoke subset, with a recall@10 regression gate vs main.
+# Runs offline (hash embedder + BM25 + stub draft) so it needs no API keys.
+
+on:
+  pull_request:
+  schedule:
+    - cron: "0 6 * * *"   # 06:00 UTC nightly
+  workflow_dispatch:
+
+concurrency:
+  group: eval-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Sync dependencies
+        run: uv sync --extra dev
+
+      # Nightly / manual: full dev set. Asserts the acceptance bar (recall@10 >= 0.7)
+      # and publishes the report as the regression baseline.
+      - name: Nightly dev eval
+        if: github.event_name != 'pull_request'
+        run: |
+          uv run scripts/eval_run.py --dataset dev --offline \
+            --assert-recall10 0.7 --json eval-dev.json
+
+      # On PR: fetch main's latest baseline if present, run the 20-query smoke set,
+      # and fail if recall@10 regresses > 5% vs that baseline.
+      - name: PR smoke eval (regression gate)
+        if: github.event_name == 'pull_request'
+        run: |
+          BASELINE=""
+          if [ -f eval-baseline-main.json ]; then BASELINE="--gate-baseline eval-baseline-main.json"; fi
+          uv run scripts/eval_run.py --dataset dev --offline --smoke 20 \
+            --assert-recall10 0.7 $BASELINE --json eval-smoke.json
+
+      - name: Upload eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report-${{ github.run_id }}
+          path: eval-*.json
+          if-no-files-found: ignore
