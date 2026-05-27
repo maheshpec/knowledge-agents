@@ -9,7 +9,7 @@ the graph stays picklable for ``SqliteSaver``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal, Protocol, TypedDict, runtime_checkable
+from typing import TYPE_CHECKING, Literal, Protocol, TypedDict, runtime_checkable
 
 from langchain_core.messages import BaseMessage
 
@@ -27,14 +27,19 @@ from harness.citation.enforcer import CitationEnforcer
 from harness.context.packer import DefaultPacker
 from harness.planning.base import Planner
 
+# Imported at runtime (not under TYPE_CHECKING) because LangGraph resolves the
+# OrchestratorState annotations via get_type_hints() when compiling the graph.
+# RouteDecision's module has no cycle back to the orchestrator; SubAgentResult
+# would (via the subagents package __init__), so that channel is typed ``list``.
+from knowledge_index.retrieval.routers.base import RouteDecision
+
 if TYPE_CHECKING:
     from harness.compaction.base import Compactor
     from harness.memory.manager import LayeredMemory
     from harness.permissions.base import Gate
     from harness.skills.registry import SkillRegistry
-    from harness.subagents.base import AgentFn, SubAgentResult
-    from knowledge_index.retrieval.routers.base import QueryRouter, RouteDecision
-    from knowledge_index.retrieval.routers.pipeline import SupportsRetrieve as RouteRetrieve
+    from harness.subagents.base import AgentFn
+    from knowledge_index.retrieval.routers.base import QueryRouter
 
 
 @runtime_checkable
@@ -76,7 +81,9 @@ class OrchestratorState(TypedDict, total=False):
     selected_skills: list[Skill]
     memory_hits: list[MemoryItem]
     # Sub-agent delegation (SPEC §6.4): results + a latch so we delegate once.
-    subagent_results: list[SubAgentResult]
+    # Typed ``list`` (of SubAgentResult) to avoid a runtime import cycle through
+    # the subagents package __init__ during LangGraph's get_type_hints().
+    subagent_results: list
     delegated: bool
     delegation_depth: int
     # Permission gates (SPEC §6.10): the action a node intends + the gate outcome.

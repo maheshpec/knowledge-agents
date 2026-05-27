@@ -16,12 +16,13 @@ from pathlib import Path
 from typing import Any
 
 from common.types import MemoryItem
+from harness.memory.base import MemoryScope
 
 
 class SessionMemory:
     """SQLite-backed, session-scoped memory store."""
 
-    scope = "session"
+    scope: MemoryScope = "session"
 
     def __init__(
         self,

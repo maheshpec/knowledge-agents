@@ -9,12 +9,13 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from common.types import MemoryItem
+from harness.memory.base import MemoryScope
 
 
 class WorkingMemory:
     """Per-turn, in-process key→item store."""
 
-    scope = "working"
+    scope: MemoryScope = "working"
 
     def __init__(self) -> None:
         self._items: dict[str, MemoryItem] = {}

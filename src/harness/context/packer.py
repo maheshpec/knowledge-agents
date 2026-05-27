@@ -63,9 +63,7 @@ class DefaultPacker:
         """
         blocks: list[str] = []
         if skills:
-            blocks.append(
-                "\n\n".join(f"## Skill: {s.name}\n{s.instructions}" for s in skills)
-            )
+            blocks.append("\n\n".join(f"## Skill: {s.name}\n{s.instructions}" for s in skills))
         if memory_hits:
             mem = "\n".join(f"- {item.key}: {item.value}" for item in memory_hits)
             blocks.append(f"Relevant memory:\n{mem}")

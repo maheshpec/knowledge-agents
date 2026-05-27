@@ -54,20 +54,23 @@ def _accumulate(
     return sorted(best.values(), key=lambda c: c.score, reverse=True)
 
 
-def _candidate_from_citation(cit: Any) -> RetrievalCandidate:
+def _candidate_from_citation(cit: Any, fallback_text: str = "") -> RetrievalCandidate:
     """Rebuild a citable candidate from a sub-agent's :class:`Citation`.
 
     Sub-agents return a :class:`GenerationResult`; its citations point at the
     chunks they grounded on. We lift those chunks back into the parent's
     candidate set so the parent can re-cite them — this is how citations are
-    *preserved across the sub-agent boundary* (SPEC §6.4 acceptance).
+    *preserved across the sub-agent boundary* (SPEC §6.4 acceptance). The lifted
+    chunk keeps the original ``chunk_id`` (so the source pointer survives) and
+    carries the citation's quote, or the sub-agent's answer text as a fallback,
+    as its body (a candidate with empty text would be dropped at enforcement).
     """
     src = cit.source
     chunk = Chunk(
         chunk_id=src.chunk_id,
         doc_id=src.doc_id,
         parent_id=src.parent_id,
-        text=cit.quote or "",
+        text=cit.quote or fallback_text or src.chunk_id,
         metadata={"doc_title": src.title} if src.title else {},
     )
     return RetrievalCandidate(chunk=chunk, score=1.0, retriever="subagent", rank=0)
@@ -134,9 +137,7 @@ def build_orchestrator(deps: OrchestratorDeps, *, checkpointer: Any = None) -> A
         for the answer preamble (SPEC §6.3, §6.6, §6.8, §7.6.1). Every branch is
         a no-op when its component is unwired, so Phase 1 deps skip straight on.
         """
-        query = Query(
-            raw=state["question"], user_principals=state.get("user_principals", [])
-        )
+        query = Query(raw=state["question"], user_principals=state.get("user_principals", []))
         delta: dict = {}
         if deps.router is not None:
             decision = await deps.router.route(query)
@@ -233,7 +234,7 @@ def build_orchestrator(deps: OrchestratorDeps, *, checkpointer: Any = None) -> A
         for res in results:
             if res.ok and res.output:
                 gen = GenerationResult.model_validate(res.output)
-                lifted = [_candidate_from_citation(c) for c in gen.citations]
+                lifted = [_candidate_from_citation(c, gen.text) for c in gen.citations]
                 if lifted:
                     candidates = _accumulate(candidates, lifted)
         spent = parent.consumed

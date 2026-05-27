@@ -16,6 +16,7 @@ from collections.abc import Callable
 
 from common.schemas import Chunk
 from common.types import MemoryItem
+from harness.memory.base import MemoryScope
 from harness.observability.tracing import traced
 from knowledge_index.embedding.base import Embedder
 from knowledge_index.indexing.qdrant_index import QdrantIndex
@@ -31,7 +32,7 @@ def _embed_text(item: MemoryItem) -> str:
 class LongTermMemory:
     """Vector-backed durable memory for one owner principal (SPEC §6.3)."""
 
-    scope = "long_term"
+    scope: MemoryScope = "long_term"
 
     def __init__(
         self,
