@@ -1,3 +1,3 @@
 # Python
 
-Python is a high-level, interpreted programming language known for readable syntax and dynamic typing. It is widely used for data science and web backends.
+Python is a high-level, interpreted programming language known for readable syntax and dynamic typing. It is widely used for data science and web backends. Python was created by Guido van Rossum and released in 1991.

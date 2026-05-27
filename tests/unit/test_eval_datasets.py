@@ -63,10 +63,39 @@ def test_missing_dataset_raises(tmp_path):
         load_dataset("nonexistent", config_path=cfg)
 
 
+def _seed(name):
+    return load_jsonl(REPO_ROOT / "evaluation" / "datasets" / "seed" / f"{name}.jsonl")
+
+
 def test_seed_datasets_are_committed_and_valid():
-    # The generated seed splits must load and carry gold doc ids (acceptance).
+    # The generated seed splits must load and carry gold doc + chunk ids so
+    # retrieval/citation metrics have something to score against (acceptance).
     for name in ("dev", "frozen", "rotating"):
-        path = REPO_ROOT / "evaluation" / "datasets" / "seed" / f"{name}.jsonl"
-        queries = load_jsonl(path)
+        queries = _seed(name)
         assert len(queries) >= 50
         assert all(q.relevant_doc_ids for q in queries)
+        assert all(q.relevant_chunk_ids for q in queries)
+        # query ids are unique within a split
+        assert len({q.query_id for q in queries}) == len(queries)
+
+
+def test_seed_datasets_meet_spec_scale():
+    # SPEC §9/§11 targets (Gap G1 / ka-94g): ~500 dev, ~500 rotating, ~1000 frozen.
+    assert len(_seed("dev")) == 500
+    assert len(_seed("rotating")) == 500
+    assert len(_seed("frozen")) == 1000
+
+
+def test_frozen_queries_are_disjoint_from_dev_and_rotating():
+    # Frozen hold-out discipline (SPEC §13): the frozen *query strings* must never
+    # coincide with anything the loop can see, so they cannot leak into search.
+    seen = {q.query for q in _seed("dev")} | {q.query for q in _seed("rotating")}
+    frozen = {q.query for q in _seed("frozen")}
+    assert seen.isdisjoint(frozen)
+
+
+def test_seed_splits_preserve_difficulty_stratification():
+    # Every split must carry all three difficulty bands (SPEC §11 stratification).
+    for name in ("dev", "rotating", "frozen"):
+        bands = {q.difficulty for q in _seed(name)}
+        assert bands == {"easy", "medium", "hard"}
