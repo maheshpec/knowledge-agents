@@ -166,6 +166,21 @@ def _build_retriever(name: str, params: dict[str, Any], deps: RegistryDeps) -> A
     if name == "hybrid_rrf":
         # The RRF fusion strategy that combines dense+sparse; rrf_k is the tunable.
         return RRFFuser(k=params.get("rrf_k", 60))
+    if name == "iterative":
+        # Multi-hop loop (SPEC §7.6.7) over a dense single-shot inner retriever,
+        # with an LLM hop judge. max_hops is the tunable; the judge reuses the
+        # shared completer dep so it runs offline under test.
+        from knowledge_index.retrieval.iterative import IterativeRetriever, LLMHopJudge
+
+        inner = DenseRetriever(
+            deps.require("index", for_component=name),
+            deps.require("embedder", for_component=name),
+        )
+        return IterativeRetriever(
+            inner,
+            LLMHopJudge(complete=deps.completer),
+            max_hops=params.get("max_hops", 3),
+        )
     raise RegistryError(f"no builder for retriever '{name}'")
 
 

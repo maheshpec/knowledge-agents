@@ -45,6 +45,9 @@ retrievers:
   - name: hybrid_rrf
     params:
       rrf_k: {type: int, range: [10, 200], default: 60}
+  - name: iterative
+    params:
+      max_hops: {type: int, range: [1, 5], default: 3}
 
 rerankers:
   - name: "null"
