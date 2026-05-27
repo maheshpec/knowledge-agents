@@ -161,8 +161,8 @@ def build_default_pipeline(
 
 
 def build_graph_variant(
-    store: "GraphStore",
-    extractor: "EntityExtractor",
+    store: GraphStore,
+    extractor: EntityExtractor,
     *,
     depth: int = 2,
     reranker: Reranker | None = None,

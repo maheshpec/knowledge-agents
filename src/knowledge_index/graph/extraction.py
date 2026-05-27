@@ -157,9 +157,7 @@ class LLMExtractor:
                 max_tokens=self.max_tokens,
                 messages=[{"role": "user", "content": blocks}],
             )
-            return "".join(
-                b.text for b in resp.content if getattr(b, "type", "") == "text"
-            ).strip()
+            return "".join(b.text for b in resp.content if getattr(b, "type", "") == "text").strip()
 
         return _complete
 

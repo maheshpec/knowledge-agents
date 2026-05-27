@@ -180,7 +180,9 @@ class Neo4jGraphStore:
                 k=entity_key,
             )
             rows = [rec async for rec in res]
-        return [Relation(subject=r["s"], predicate=r["p"], object=r["o"], chunk_id=r["c"]) for r in rows]
+        return [
+            Relation(subject=r["s"], predicate=r["p"], object=r["o"], chunk_id=r["c"]) for r in rows
+        ]
 
     async def traverse(self, seeds: list[str], depth: int) -> set[str]:
         async with self._driver.session(database=self._db) as s:
@@ -197,9 +199,7 @@ class Neo4jGraphStore:
 
     async def has_entity(self, entity_key: str) -> bool:
         async with self._driver.session(database=self._db) as s:
-            res = await s.run(
-                "MATCH (e:Entity {key:$k}) RETURN count(e) AS n", k=entity_key
-            )
+            res = await s.run("MATCH (e:Entity {key:$k}) RETURN count(e) AS n", k=entity_key)
             rec = await res.single()
         return bool(rec and rec["n"])
 

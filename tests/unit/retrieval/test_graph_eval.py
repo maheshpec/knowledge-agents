@@ -55,8 +55,24 @@ _RELATIONAL_GOLD = [
 ]
 
 _STOPWORDS = {
-    "which", "person", "individual", "owns", "leads", "the", "company", "business",
-    "by", "that", "a", "was", "is", "who", "of", "to", "in", "and",
+    "which",
+    "person",
+    "individual",
+    "owns",
+    "leads",
+    "the",
+    "company",
+    "business",
+    "by",
+    "that",
+    "a",
+    "was",
+    "is",
+    "who",
+    "of",
+    "to",
+    "in",
+    "and",
 }
 
 
@@ -79,9 +95,7 @@ class VectorBaselineRetriever:
 
     async def retrieve(self, query: Query, k: int) -> list[RetrievalCandidate]:
         q_terms = self._terms(query.raw)
-        scored = [
-            (c, len(q_terms & self._terms(c.text))) for c in self._corpus
-        ]
+        scored = [(c, len(q_terms & self._terms(c.text))) for c in self._corpus]
         scored.sort(key=lambda cs: cs[1], reverse=True)  # stable: ties keep order
         return [
             RetrievalCandidate(chunk=c, score=float(s), retriever=self.name, rank=i)
@@ -146,6 +160,8 @@ async def test_strategy_graph_routes_through_pipeline(graph_store):
         hybrid=graph_variant,  # unused when graph variant resolves
         variants={"graph": graph_variant},
     )
-    result = await pipeline.retrieve(Query(raw="Which person owns the company acquired by Acme Corp?"), k=3)
+    result = await pipeline.retrieve(
+        Query(raw="Which person owns the company acquired by Acme Corp?"), k=3
+    )
     ids = {c.chunk.chunk_id for c in result.candidates}
     assert "c2" in ids  # the bridging answer chunk surfaced via the graph route
