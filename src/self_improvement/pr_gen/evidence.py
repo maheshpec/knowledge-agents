@@ -13,7 +13,7 @@ time — the same decoupling the retrieval layer uses for Convoy B (SPEC §7.6.3
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -100,7 +100,7 @@ class EvidencePackage(BaseModel):
     reviewer: ReviewerReport
     langsmith_trace_url: str | None
     heldout_results_url: str | None
-    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     def improved_metrics(self) -> list[MetricDelta]:
         return [d for d in self.metric_deltas if d.improved]
