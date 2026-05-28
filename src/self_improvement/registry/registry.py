@@ -31,6 +31,9 @@ CATEGORIES = (
     "rerankers",
     "post_processors",
     "query_ops",
+    # Phase 5 (SPEC §15.2): the DCI heuristic router exposes evolvable weights
+    # so the Phase 4 loop can tune the DCI-vs-vector mix per workload.
+    "routers",
 )
 
 
@@ -240,6 +243,16 @@ def _build_query_op(name: str, params: dict[str, Any], deps: RegistryDeps) -> An
     raise RegistryError(f"no builder for query_op '{name}'")
 
 
+def _build_router(name: str, params: dict[str, Any], deps: RegistryDeps) -> Any:
+    from knowledge_index.retrieval.routers import HeuristicRouter
+
+    if name == "heuristic":
+        # Param-only (no LLM completer needed) — the heuristic router scores
+        # cheap lexical signals and picks a DCI / chained / vector strategy.
+        return HeuristicRouter(**params)
+    raise RegistryError(f"no builder for router '{name}'")
+
+
 _BUILDERS: dict[str, Callable[[str, dict[str, Any], RegistryDeps], Any]] = {
     "chunkers": _build_chunker,
     "enrichers": _build_enricher,
@@ -247,6 +260,7 @@ _BUILDERS: dict[str, Callable[[str, dict[str, Any], RegistryDeps], Any]] = {
     "rerankers": _build_reranker,
     "post_processors": _build_post,
     "query_ops": _build_query_op,
+    "routers": _build_router,
 }
 
 

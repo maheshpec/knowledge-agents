@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from harness.sandbox.executor import SandboxedToolExecutor
     from harness.skills.registry import SkillRegistry
     from harness.subagents.base import AgentFn
+    from knowledge_index.dci.protocol import DCIExecutor
     from knowledge_index.retrieval.routers.base import QueryRouter
 
 
@@ -156,6 +157,12 @@ class OrchestratorDeps:
     tools: dict[str, Tool] = field(default_factory=dict)
     tool_policies: dict[str, SandboxPolicy] = field(default_factory=dict)
     require_sandbox: bool = False
+
+    # DCI (Phase 5, SPEC §15.3): the executor fronting the corpus_grep /
+    # corpus_glob / corpus_read / corpus_neighbors / ... tools shipped in 5A.
+    # Optional — the graph only adds the ``dci_tool`` node when an executor
+    # is wired AND the router emits a DCI strategy.
+    dci_executor: DCIExecutor | None = None
 
     extra: dict = field(default_factory=dict)
 

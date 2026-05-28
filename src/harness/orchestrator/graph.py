@@ -36,6 +36,7 @@ from harness.observability.logging import get_logger
 from harness.observability.tracing import traced
 from harness.orchestrator.state import OrchestratorDeps, OrchestratorState
 from harness.planning.base import PlanningContext
+from knowledge_index.retrieval.routers.base import DCI_STRATEGIES
 
 _log = get_logger("harness.orchestrator")
 
@@ -178,6 +179,22 @@ def build_orchestrator(deps: OrchestratorDeps, *, checkpointer: Any = None) -> A
             return False
         return bool(delegatable_steps(state.get("plan")))
 
+    def _dci_hop_target(strategy: str, hop: int) -> str:
+        """Which node a DCI strategy needs at hop index ``hop`` (SPEC §15.2).
+
+        ``dci``: only the first hop runs against DCI; subsequent hops fall through
+        to ``answer`` (handled by the outer max_hops guard).
+        ``dci_then_vector``: grep first to narrow candidates, then vector expand.
+        ``vector_then_dci``: vector first to seed entities, then grep to pin them.
+        """
+        if strategy == "dci":
+            return "dci_tool"
+        if strategy == "dci_then_vector":
+            return "dci_tool" if hop == 0 else "retrieve"
+        if strategy == "vector_then_dci":
+            return "retrieve" if hop == 0 else "dci_tool"
+        return "retrieve"
+
     def route_decision(state: OrchestratorState) -> str:
         # Drain any queued tool calls first: a pending call must execute (in the
         # sandbox) before we spend budget or answer (SPEC §6.7).
@@ -191,6 +208,21 @@ def build_orchestrator(deps: OrchestratorDeps, *, checkpointer: Any = None) -> A
             _log.info("orchestrator.route", decision="sub-agent")
             return "sub-agent"
         if state["hops"] < state["max_hops"]:
+            # SPEC §15.3: when the router asks for a DCI strategy AND a DCI
+            # executor is wired, route this hop to the dci_tool node according
+            # to the chained-mode schedule. Without an executor we degrade to
+            # the existing retrieve path so the orchestrator still progresses.
+            decision = state.get("route_decision")
+            strategy = decision.strategy if decision is not None else "hybrid"
+            if strategy in DCI_STRATEGIES and deps.dci_executor is not None:
+                target = _dci_hop_target(strategy, state["hops"])
+                _log.info(
+                    "orchestrator.route",
+                    decision=target,
+                    strategy=strategy,
+                    hop=state["hops"],
+                )
+                return target
             _log.info("orchestrator.route", decision="retrieve", hop=state["hops"])
             return "retrieve"
         _log.info("orchestrator.route", decision="answer", hop=state["hops"])
@@ -265,6 +297,44 @@ def build_orchestrator(deps: OrchestratorDeps, *, checkpointer: Any = None) -> A
             "delegated": True,
             "pending_action": None,
             "budget_remaining": max(0.0, state["budget_remaining"] - spent),
+        }
+
+    @traced(span_name="orchestrator.dci_tool")
+    async def dci_tool_node(state: OrchestratorState) -> dict:
+        """Run the DCI executor for one hop (SPEC §15.3).
+
+        Mirrors :func:`retrieve_node` so DCI candidates flow through the same
+        accumulator, citation enforcer, and budget tracker — the orchestrator
+        treats DCI exactly like a retrieval hop, so chained modes
+        (``dci_then_vector`` / ``vector_then_dci``) just alternate this node
+        with ``retrieve`` and stack the merged candidates.
+        """
+        executor = deps.dci_executor
+        assert executor is not None  # guarded by route_decision
+        query = Query(
+            raw=state["question"],
+            user_principals=state.get("user_principals", []),
+        )
+        decision = state.get("route_decision")
+        if decision is not None:
+            query = query.model_copy(
+                update={"intent": decision.intent, "filters": dict(decision.filters)}
+            )
+        result = await executor.run(query, state["k"])
+        results = [*state.get("retrieval_results", []), result]
+        candidates = _accumulate(state.get("candidates", []), result.candidates)
+        remaining = max(0.0, state["budget_remaining"] - result.cost)
+        _log.info(
+            "orchestrator.dci_tool",
+            candidates=len(result.candidates),
+            cost=result.cost,
+            executor=getattr(executor, "name", "dci"),
+        )
+        return {
+            "retrieval_results": results,
+            "candidates": candidates,
+            "budget_remaining": remaining,
+            "hops": state["hops"] + 1,
         }
 
     @traced(span_name="orchestrator.tool")
@@ -400,8 +470,9 @@ def build_orchestrator(deps: OrchestratorDeps, *, checkpointer: Any = None) -> A
     graph.add_edge("context", "route")
 
     # ``route`` fans out to retrieve / sub-agent / answer (+ tool when a sandbox
-    # executor is wired). The "sub-agent" branch passes through the permission
-    # gate first when gates are configured.
+    # executor is wired, + dci_tool when a DCI executor is wired). The
+    # "sub-agent" branch passes through the permission gate first when gates
+    # are configured.
     subagent_target = "gate" if deps.gates else "sub_agent"
     route_targets: dict[Hashable, str] = {
         "retrieve": "retrieve",
@@ -412,6 +483,13 @@ def build_orchestrator(deps: OrchestratorDeps, *, checkpointer: Any = None) -> A
         graph.add_node("tool", tool_node)
         graph.add_edge("tool", "observe")
         route_targets["tool"] = "tool"
+    if deps.dci_executor is not None:
+        # SPEC §15.3: the dci_tool node sits between route and observe — its
+        # outputs go through the same observe → compact? → route loop so DCI
+        # candidates compose with vector retrieval in chained modes.
+        graph.add_node("dci_tool", dci_tool_node)
+        graph.add_edge("dci_tool", "observe")
+        route_targets["dci_tool"] = "dci_tool"
     graph.add_conditional_edges("route", route_decision, route_targets)
     graph.add_edge("retrieve", "observe")
     graph.add_edge("sub_agent", "observe")

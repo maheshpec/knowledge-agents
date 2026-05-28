@@ -70,6 +70,7 @@ def test_loads_all_categories(registry):
         "rerankers",
         "post_processors",
         "query_ops",
+        "routers",
     }
 
 

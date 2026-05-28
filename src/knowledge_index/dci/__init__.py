@@ -1,4 +1,4 @@
-"""Direct Corpus Interaction (DCI) — Phase 5A (SPEC §15).
+"""Direct Corpus Interaction (DCI) — Phase 5 (SPEC §15).
 
 Filesystem-style tools that let the orchestrator interact with the indexed
 corpus directly (grep / glob / ls / read / describe / neighbors) instead of —
@@ -14,6 +14,8 @@ The public surface:
   scrolls).
 * The six tool classes plus the :func:`make_dci_tools` factory the orchestrator
   uses to register them.
+* :class:`DCIExecutor` — the executor protocol (Phase 5B) the orchestrator
+  and router are wired against.
 * :func:`dci_policy` — the default :class:`SandboxPolicy` for DCI tools
   (no network, read-only FS, modest CPU/memory caps).
 """
@@ -31,6 +33,7 @@ from knowledge_index.dci.base import (
     GrepHit,
     InMemoryCorpusStore,
 )
+from knowledge_index.dci.protocol import DCIExecutor
 from knowledge_index.dci.sandbox import dci_policy
 from knowledge_index.dci.tools import (
     CorpusDescribeTool,
@@ -64,6 +67,8 @@ __all__ = [
     "CorpusDescribeTool",
     "CorpusNeighborsTool",
     "make_dci_tools",
+    # executor protocol (Phase 5B)
+    "DCIExecutor",
     # sandbox
     "dci_policy",
 ]

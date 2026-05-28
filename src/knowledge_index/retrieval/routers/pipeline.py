@@ -15,7 +15,12 @@ from typing import Protocol, runtime_checkable
 from common.schemas import Query, RetrievalResult
 from harness.observability.logging import get_logger
 from harness.observability.tracing import traced
-from knowledge_index.retrieval.routers.base import QueryRouter, RouteDecision, Strategy
+from knowledge_index.retrieval.routers.base import (
+    DCI_STRATEGIES,
+    QueryRouter,
+    RouteDecision,
+    Strategy,
+)
 
 _log = get_logger("knowledge_index.retrieval.routers.pipeline")
 
@@ -47,7 +52,11 @@ class RouterPipeline:
         variant = self._variants.get(strategy)
         if variant is not None:
             return variant
-        if strategy in ("graph", "iterative"):
+        # DCI strategies are owned by the orchestrator's dci_tool node (SPEC
+        # §15.3); if one reaches RouterPipeline (e.g. caller invoked
+        # ``retrieve`` directly without going through the orchestrator) we
+        # degrade to hybrid rather than fail — same shape as graph/iterative.
+        if strategy in ("graph", "iterative") or strategy in DCI_STRATEGIES:
             _log.info("router.fallback", strategy=strategy, to="hybrid")
         return self._variants.get("hybrid", self._hybrid)
 

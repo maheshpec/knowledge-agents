@@ -73,3 +73,23 @@ query_ops:
   - name: hyde
   - name: decompose
   - name: stepback
+
+# Query routers (SPEC §7.6.1, §15.2). Registered so the Phase 4 evolutionary
+# loop can evolve the DCI-vs-vector routing thresholds per workload (§8.1).
+routers:
+  - name: heuristic
+    class: knowledge_index.retrieval.routers.HeuristicRouter
+    params:
+      # Quoted exact phrases are the strongest DCI signal (users quote a phrase
+      # when they want lexical match).
+      quote_weight: {type: float, range: [0.0, 10.0], default: 3.0}
+      # camelCase / snake_case / dotted / path-like tokens push toward DCI.
+      identifier_weight: {type: float, range: [0.0, 10.0], default: 1.5}
+      # Backticks and code keywords (def/class/import/…): also DCI signals.
+      code_keyword_weight: {type: float, range: [0.0, 10.0], default: 2.0}
+      # Two+ proper nouns + a connective ("between X and Y") → chained mode.
+      bridge_weight: {type: float, range: [0.0, 10.0], default: 2.0}
+      # Long, signal-less queries → vector hybrid (paraphrastic territory).
+      long_query_vector_weight: {type: float, range: [0.0, 10.0], default: 1.5}
+      # Minimum bucket score that beats vector hybrid as the default.
+      dci_threshold: {type: float, range: [0.0, 10.0], default: 1.0}

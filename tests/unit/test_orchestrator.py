@@ -107,6 +107,129 @@ async def test_runs_with_async_sqlite_checkpointer():
     assert snapshot.values["result"].text == "fact number 0"
 
 
+# ---- Phase 5B: DCI routing + chained modes (SPEC §15.2/§15.3, ka-p1b) -------
+
+
+class _FakeDCIExecutor:
+    """Records calls and returns preset candidates as a RetrievalResult."""
+
+    name = "fake_dci"
+
+    def __init__(self, candidates: list[RetrievalCandidate], cost: float = 0.0) -> None:
+        self._candidates = candidates
+        self.cost = cost
+        self.calls: list[Query] = []
+
+    async def run(self, query: Query, k: int) -> RetrievalResult:
+        self.calls.append(query)
+        return RetrievalResult(
+            candidates=self._candidates[:k], query=query, trace_id=uuid4(), cost=self.cost
+        )
+
+
+class _StubRouter:
+    name = "stub"
+
+    def __init__(self, strategy: str) -> None:
+        from knowledge_index.retrieval.routers import RouteDecision
+
+        self._decision = RouteDecision(strategy=strategy, intent="lookup")
+
+    async def route(self, query):  # noqa: D401 - protocol method
+        return self._decision
+
+
+def _dci_cands(n: int) -> list[RetrievalCandidate]:
+    return [
+        RetrievalCandidate(
+            chunk=Chunk(chunk_id=f"g{i}", doc_id=f"d{i}", text=f"grep hit {i}"),
+            score=1.0 - i * 0.1,
+            retriever="dci",
+            rank=i,
+        )
+        for i in range(n)
+    ]
+
+
+def _deps_with_dci(
+    pipeline,
+    dci_executor,
+    *,
+    strategy: str,
+) -> OrchestratorDeps:
+    return OrchestratorDeps(
+        pipeline=pipeline,
+        enforcer=CitationEnforcer(draft_fn=_draft_top),
+        packer=DefaultPacker(),
+        planner=ReactPlanner(),
+        router=_StubRouter(strategy),
+        dci_executor=dci_executor,
+        allow_delegation=False,
+    )
+
+
+async def test_dci_strategy_runs_dci_node_and_skips_retrieve():
+    pipe = FakePipeline(_cands(3))
+    dci = _FakeDCIExecutor(_dci_cands(3))
+    deps = _deps_with_dci(pipe, dci, strategy="dci")
+    final = await _run(deps, budget_usd=1.0, max_hops=1, k=5)
+    assert len(dci.calls) == 1
+    assert pipe.calls == 0
+    # Candidates came from the DCI executor; the cited chunk_id is a DCI hit.
+    assert final["result"].citations[0].source.chunk_id.startswith("g")
+
+
+async def test_dci_then_vector_runs_dci_first_then_retrieve():
+    pipe = FakePipeline(_cands(3))
+    dci = _FakeDCIExecutor(_dci_cands(3))
+    deps = _deps_with_dci(pipe, dci, strategy="dci_then_vector")
+    final = await _run(deps, budget_usd=1.0, max_hops=2, k=5)
+    assert len(dci.calls) == 1
+    assert pipe.calls == 1
+    assert final["hops"] == 2
+    # Both retrievers contributed candidates to the final pool.
+    retrievers = {c.retriever for c in final["candidates"]}
+    assert retrievers == {"dci", "dense"}
+
+
+async def test_vector_then_dci_runs_retrieve_first_then_dci():
+    pipe = FakePipeline(_cands(3))
+    dci = _FakeDCIExecutor(_dci_cands(3))
+    deps = _deps_with_dci(pipe, dci, strategy="vector_then_dci")
+    final = await _run(deps, budget_usd=1.0, max_hops=2, k=5)
+    assert pipe.calls == 1
+    assert len(dci.calls) == 1
+    assert final["hops"] == 2
+    retrievers = {c.retriever for c in final["candidates"]}
+    assert retrievers == {"dci", "dense"}
+
+
+async def test_dci_strategy_falls_back_when_no_executor_wired():
+    # SPEC §15.3 graceful degradation: a DCI strategy must not crash when the
+    # executor is missing — the orchestrator falls back to vector retrieve so
+    # the answer still grounds on the vector hybrid pipeline.
+    pipe = FakePipeline(_cands(3))
+    deps = OrchestratorDeps(
+        pipeline=pipe,
+        enforcer=CitationEnforcer(draft_fn=_draft_top),
+        packer=DefaultPacker(),
+        planner=ReactPlanner(),
+        router=_StubRouter("dci"),
+        dci_executor=None,
+    )
+    final = await _run(deps, budget_usd=1.0, max_hops=1, k=5)
+    assert pipe.calls == 1
+    assert final["result"].text == "fact number 0"
+
+
+async def test_dci_tool_node_deducts_cost_from_budget():
+    pipe = FakePipeline(_cands(3))
+    dci = _FakeDCIExecutor(_dci_cands(3), cost=0.05)
+    deps = _deps_with_dci(pipe, dci, strategy="dci")
+    final = await _run(deps, budget_usd=1.0, max_hops=1, k=5)
+    assert final["budget_remaining"] <= 1.0 - 0.05
+
+
 async def test_planner_mode_todo_list_uses_todo_planner():
     # SPEC §6.2 / Phase 2G: planner_mode='todo_list' branches the plan node to
     # the injected todo_planner; 'react' (default) keeps the ReAct planner.
