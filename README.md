@@ -42,6 +42,44 @@ for the end-to-end acceptance contract.
 Every Phase 2 component is optional on `OrchestratorDeps`; with none wired the
 graph collapses to the Phase 1 `plan → route → {retrieve | answer}` loop.
 
+### Phase 4 capabilities — self-improvement
+
+The AlphaEvolve-style self-improvement loop (SPEC §8) is wired end-to-end:
+
+- **Component registry (§8.1):** the bounded search space in
+  `configs/components.yaml` — every chunker/enricher/retriever/reranker
+  variant the loop is allowed to try. New techniques enter via PR review.
+- **Evolutionary loop (§8.2):** seed → mutate/cross → evaluate → review →
+  select. Composite-score selection with a **delta threshold** and **Goodhart
+  guard** (dev gains must hold on the rotating set).
+- **Experiment ledger (§8.2.1):** append-only JSONL under `experiments/runs/{run_id}/`
+  with replayable `Experiment` records, manifest, and best-effort `lineage.parquet`.
+- **Adversarial reviewer (§8.3):** deterministic leakage / narrow-slice /
+  noise-band / regression checks plus an optional LLM pass that can only make
+  the verdict more conservative.
+- **PR generator (§8.4):** evidence package + draft PR via a `GitHubClient`
+  protocol that **deliberately exposes no merge method** — no-auto-merge is
+  structural, not just policy (anti-pattern §13).
+- **Budget guard (§8.5):** hard ceilings on generations, compute-hours/gen,
+  $/run, and a daily $ ceiling, with a one-way kill switch.
+
+Frozen-set isolation (§9.1) is enforced by `evaluation.datasets.loader`: while
+the loop's `evolution_mode()` context is active, loading the frozen split
+raises `FrozenSetIsolationError`. See
+[`tests/integration/test_phase4_acceptance.py`](./tests/integration/test_phase4_acceptance.py)
+for the SPEC-§11 acceptance contract end-to-end with mocked LLM + GitHub.
+
+Quick-start (offline smoke run; writes the ledger under `experiments/`):
+
+```bash
+uv run scripts/self_improve_run.py --generations 5 --population 8 --budget-usd 50
+```
+
+Wiring a real evaluator: import `build_loop` from `self_improvement.integration`
+and pass any `Evaluator` / `Reviewer` (e.g. a thin wrapper around
+`evaluation.runners.EvalRunner` and `self_improvement.reviewer.AdversarialReviewer`);
+the script's `SyntheticEvaluator` is a deterministic offline placeholder.
+
 ## Requirements
 
 - Python ≥ 3.11

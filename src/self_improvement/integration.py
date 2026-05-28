@@ -23,7 +23,7 @@ the durable ledger, and a no-merge PR surface — exactly the Phase 4 contract.
 from __future__ import annotations
 
 import random
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -33,9 +33,10 @@ from self_improvement.evolutionary import (
 )
 from self_improvement.evolutionary import (
     Candidate,
-    EvolutionaryLoop,
     Evaluator,
+    EvolutionaryLoop,
     Reviewer,
+    ScorePolicy,
 )
 from self_improvement.evolutionary.types import MutationRecord as EvoMutationRecord
 from self_improvement.ledger import Experiment
@@ -43,7 +44,6 @@ from self_improvement.ledger import MutationRecord as LedgerMutationRecord
 from self_improvement.ledger.ledger import JSONLLedger
 from self_improvement.registry import ComponentRegistry
 from self_improvement.registry.pipeline_config import PipelineConfig
-
 
 # --- ledger ------------------------------------------------------------------
 
@@ -169,6 +169,7 @@ def build_loop(
     budget_config: BudgetConfig | None = None,
     seed_config: PipelineConfig | None = None,
     delta_threshold: float | None = None,
+    score_policy: ScorePolicy | None = None,
     rng: random.Random | None = None,
 ) -> tuple[EvolutionaryLoop, JSONLLedger, BudgetGuard]:
     """Compose a self-improvement loop wired to the §8.2.1 ledger + §8.5 guard.
@@ -188,6 +189,8 @@ def build_loop(
         extras["delta_threshold"] = delta_threshold
     if seed_config is not None:
         extras["seed_config"] = seed_config
+    if score_policy is not None:
+        extras["score_policy"] = score_policy
     if rng is not None:
         extras["rng"] = rng
     loop = EvolutionaryLoop(
