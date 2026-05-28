@@ -115,6 +115,39 @@ uv run scripts/eval_run.py --dataset frozen --pipeline configs/default.yaml
 uv run scripts/self_improve_run.py --generations 5 --population 8 --budget-usd 50
 ```
 
+### Direct Corpus Interaction (Phase 5)
+
+The harness ships filesystem-style tools that grep / glob / read the indexed
+corpus directly (SPEC §15). The router auto-selects DCI when a query carries
+exact identifiers, quoted phrases, or code-style tokens; vector hybrid stays
+the default for paraphrastic prose; chained modes mix both for multi-hop
+"X relates to Y" queries.
+
+```python
+from knowledge_index.dci import InMemoryCorpusStore, make_dci_tools, dci_policy
+from harness.sandbox import LocalSandbox, SandboxedToolExecutor
+
+store = InMemoryCorpusStore()
+store.add_chunks(my_chunks)  # any Chunks already in the index
+
+tools = make_dci_tools(store)                              # SPEC §15.1
+executor = SandboxedToolExecutor(LocalSandbox(),           # SPEC §6.7, §15.4
+                                  default_policy=dci_policy())
+
+# grep raw doc text — ACLs enforced inside the store
+hits = (await executor.execute(
+    tools["corpus_grep"],
+    {"pattern": "ERR_PAYLOAD_TOO_LARGE", "user_principals": ["team-a"]},
+)).output
+for h in hits:
+    print(h.doc_id, h.line_no, h.snippet, "→ cites", h.citation.chunk_id)
+```
+
+See `docs/orchestrator-graph.md` for how the `dci_tool` node and chained modes
+slot into the orchestrator, and `evaluation/datasets/dci/` for the lexical /
+paraphrastic / multi-hop eval slices that the Phase 5 acceptance test
+(`tests/integration/test_phase5_acceptance.py`) checks against SPEC §15.5.
+
 ## Layout
 
 ```

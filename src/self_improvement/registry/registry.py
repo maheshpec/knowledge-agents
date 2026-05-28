@@ -34,6 +34,10 @@ CATEGORIES = (
     # Phase 5 (SPEC §15.2): the DCI heuristic router exposes evolvable weights
     # so the Phase 4 loop can tune the DCI-vs-vector mix per workload.
     "routers",
+    # Phase 5C (SPEC §15.6): per-tool ceilings (max_hits, max_bytes, context
+    # lines, max_hops) — declared so the evolutionary loop can tune the DCI
+    # tool budgets per workload alongside the router weights above.
+    "dci_tools",
 )
 
 
@@ -50,6 +54,10 @@ class RegistryDeps:
     cohere_client: Any = None  # cohere.AsyncClientV2
     fetch_parent: Any = None  # async (parent_id) -> Chunk | None
     completer: Any = None  # async (prompt) -> str, for LLM query ops
+    # Phase 5 (SPEC §15.1): the DCI tools call into a CorpusStore (grep / glob /
+    # ls / read / describe) and optionally a GraphStore (neighbors).
+    corpus_store: Any = None  # knowledge_index.dci.CorpusStore
+    graph_store: Any = None  # knowledge_index.graph.GraphStore (optional)
 
     def require(self, field_name: str, *, for_component: str) -> Any:
         value = getattr(self, field_name)
@@ -253,6 +261,52 @@ def _build_router(name: str, params: dict[str, Any], deps: RegistryDeps) -> Any:
     raise RegistryError(f"no builder for router '{name}'")
 
 
+def _build_dci_tool(name: str, params: dict[str, Any], deps: RegistryDeps) -> Any:
+    """Instantiate one DCI tool (SPEC §15.1) with its sweep-able ceilings applied.
+
+    Tools other than ``corpus_neighbors`` use ``deps.corpus_store``; neighbors
+    additionally needs ``deps.graph_store``. Param keys are validated against
+    the spec, then mapped onto each tool's constructor.
+    """
+    from knowledge_index.dci import (
+        CorpusDescribeTool,
+        CorpusGlobTool,
+        CorpusGrepTool,
+        CorpusLsTool,
+        CorpusNeighborsTool,
+        CorpusReadTool,
+    )
+
+    if name == "corpus_grep":
+        return CorpusGrepTool(
+            deps.require("corpus_store", for_component=name),
+            default_max_hits=int(params.get("max_hits", 50)),
+            default_context_lines=int(params.get("context_lines", 2)),
+        )
+    if name == "corpus_glob":
+        return CorpusGlobTool(
+            deps.require("corpus_store", for_component=name),
+            default_limit=int(params.get("limit", 200)),
+        )
+    if name == "corpus_ls":
+        return CorpusLsTool(deps.require("corpus_store", for_component=name))
+    if name == "corpus_read":
+        return CorpusReadTool(
+            deps.require("corpus_store", for_component=name),
+            default_max_bytes=int(params.get("max_bytes", 50_000)),
+        )
+    if name == "corpus_describe":
+        return CorpusDescribeTool(deps.require("corpus_store", for_component=name))
+    if name == "corpus_neighbors":
+        return CorpusNeighborsTool(
+            deps.require("graph_store", for_component=name),
+            default_hops=int(params.get("hops", 1)),
+            max_hops=int(params.get("max_hops", 3)),
+            max_results=int(params.get("max_results", 50)),
+        )
+    raise RegistryError(f"no builder for dci_tool '{name}'")
+
+
 _BUILDERS: dict[str, Callable[[str, dict[str, Any], RegistryDeps], Any]] = {
     "chunkers": _build_chunker,
     "enrichers": _build_enricher,
@@ -261,6 +315,7 @@ _BUILDERS: dict[str, Callable[[str, dict[str, Any], RegistryDeps], Any]] = {
     "post_processors": _build_post,
     "query_ops": _build_query_op,
     "routers": _build_router,
+    "dci_tools": _build_dci_tool,
 }
 
 

@@ -95,3 +95,46 @@ is preserved end-to-end (the Phase 2 acceptance contract, SPEC §10).
 (`planner_mode="todo_list"`) via `build_default_deps`. Pass `planner_mode="react"`
 for the Phase 1 loop, or `deps=`/`app=` to inject a prebuilt stack (as the tests
 do, fully offline).
+
+## DCI (Phase 5) — `dci_tool` node
+
+Phase 5 (SPEC §15) adds Direct Corpus Interaction: filesystem-style tools that
+let the orchestrator interact with the indexed corpus directly (grep / glob /
+ls / read / describe / neighbors) instead of — or alongside — vector retrieval.
+The router (`HeuristicRouter`, §15.2) picks one of four strategies per query
+and the orchestrator runs a hop against the matching node:
+
+| Strategy | hop 0 | hop 1+ | When the router picks it |
+|---|---|---|---|
+| `hybrid` | `retrieve` | `retrieve` | Paraphrastic / long prose / no strong DCI signal |
+| `dci` | `dci_tool` | `answer` | Exact identifiers / quoted phrases / code keywords |
+| `dci_then_vector` | `dci_tool` | `retrieve` | Two named entities + a connective ("X relates to Y") |
+| `vector_then_dci` | `retrieve` | `dci_tool` | Vector heavier than DCI but bridge signal present |
+
+```
+                                                          ┌────────────┐
+                              (strategy = dci             │  dci_tool  │ §15.3
+   route ─────────────────▶   | dci_then_vector hop 0 ▶─▶│ executor   │
+                              | vector_then_dci hop 1+ )  │ (grep/glob │
+                                                          │ /ls/read/  │
+                                                          │ neighbors) │
+                                                          └──────┬─────┘
+                                                                 │
+                                                          ┌──────▼─────┐
+                                                          │  observe   │
+                                                          └────────────┘
+```
+
+`dci_tool_node` mirrors `retrieve_node`: it asks the wired `DCIExecutor`
+(`OrchestratorDeps.dci_executor`) for one hop, accumulates the returned
+candidates into the same evidence set, debits the same budget tracker, and
+bumps `hops`. So `dci` candidates flow through the citation enforcer like
+every other candidate (no special-case provenance), and chained modes are
+just an alternating schedule of `dci_tool` and `retrieve` until `max_hops`.
+
+Every DCI tool runs through `SandboxedToolExecutor` under `dci_policy()`
+(no network, read-only FS, capped CPU/memory — §15.4). ACLs are enforced
+*inside* the `CorpusStore` against the caller's principals (§11 #6), and the
+red-team suite (`tests/redteam/test_dci_probes.py`) covers prompt-injection
+via grep output, ACL-bypass via crafted globs, sandbox-escape attempts on
+`/etc/`-style patterns, and path-traversal via `doc_id` manipulation.

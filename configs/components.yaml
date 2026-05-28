@@ -93,3 +93,33 @@ routers:
       long_query_vector_weight: {type: float, range: [0.0, 10.0], default: 1.5}
       # Minimum bucket score that beats vector hybrid as the default.
       dci_threshold: {type: float, range: [0.0, 10.0], default: 1.0}
+
+# DCI tools (SPEC §15.1, §15.6). Per-tool ceilings declared so the Phase 4
+# evolutionary loop can tune the DCI budget per workload (a small max_hits
+# trades recall for token cost; a large max_bytes lets corpus_read pull more
+# context at the cost of prompt size). Phase 5C declares the search space;
+# §15.6 lists this as the explicit self-improvement integration point.
+dci_tools:
+  - name: corpus_grep
+    class: knowledge_index.dci.CorpusGrepTool
+    params:
+      max_hits: {type: int, range: [5, 200], default: 50}
+      context_lines: {type: int, range: [0, 10], default: 2}
+  - name: corpus_glob
+    class: knowledge_index.dci.CorpusGlobTool
+    params:
+      limit: {type: int, range: [10, 1000], default: 200}
+  - name: corpus_ls
+    class: knowledge_index.dci.CorpusLsTool
+  - name: corpus_read
+    class: knowledge_index.dci.CorpusReadTool
+    params:
+      max_bytes: {type: int, range: [1000, 200000], default: 50000}
+  - name: corpus_describe
+    class: knowledge_index.dci.CorpusDescribeTool
+  - name: corpus_neighbors
+    class: knowledge_index.dci.CorpusNeighborsTool
+    params:
+      hops: {type: int, range: [1, 3], default: 1}
+      max_hops: {type: int, range: [1, 5], default: 3}
+      max_results: {type: int, range: [5, 200], default: 50}

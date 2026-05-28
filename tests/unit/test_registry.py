@@ -44,6 +44,55 @@ async def _complete(_prompt):
     return "rewritten"
 
 
+class _FakeCorpusStore:
+    """Bare-minimum CorpusStore stand-in: each method returns an empty result.
+
+    Enough to instantiate every DCI tool builder; the tools themselves only need
+    the store to exist (they don't call into it at construction time).
+    """
+
+    async def glob(self, pattern="**/*", *, types=None, limit=200, principals=None):
+        return []
+
+    async def ls(self, path="/", *, principals=None):
+        from knowledge_index.dci.base import DirectoryListing
+
+        return DirectoryListing(path=path)
+
+    async def read(self, doc_id, *, start_line=1, end_line=None, max_bytes=50000, principals=None):
+        from common.schemas import Source
+        from knowledge_index.dci.base import DocSlice
+
+        return DocSlice(doc_id=doc_id, content="", citation=Source(doc_id=doc_id, chunk_id=""))
+
+    async def describe(self, doc_id, *, principals=None):
+        from knowledge_index.dci.base import DocMetadata
+
+        return DocMetadata(doc_id=doc_id)
+
+    async def grep(
+        self,
+        pattern,
+        *,
+        glob="**/*",
+        regex=True,
+        max_hits=50,
+        context_lines=2,
+        principals=None,
+    ):
+        return []
+
+
+class _FakeGraphStore:
+    """Likewise minimal: the neighbors tool only needs the store at construct time."""
+
+    async def neighbors(self, key):
+        return []
+
+    async def chunks_for(self, key):
+        return []
+
+
 def _deps() -> RegistryDeps:
     return RegistryDeps(
         index=_FakeIndex(),
@@ -51,6 +100,8 @@ def _deps() -> RegistryDeps:
         cohere_client=_FakeCohere(),
         fetch_parent=_fetch_parent,
         completer=_complete,
+        corpus_store=_FakeCorpusStore(),
+        graph_store=_FakeGraphStore(),
     )
 
 
@@ -71,6 +122,7 @@ def test_loads_all_categories(registry):
         "post_processors",
         "query_ops",
         "routers",
+        "dci_tools",
     }
 
 
