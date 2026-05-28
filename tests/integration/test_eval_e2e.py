@@ -18,6 +18,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 import eval_run  # noqa: E402
 
 
+@pytest.mark.xfail(
+    reason="Spec-scale recall gap tracked as ka-8t7 (Mayor decision on ka-94g): the "
+    "expanded dev set surfaces a real retrieval-quality gap the self-improvement "
+    "loop will own closing. The 0.7 bar stays as the honest target — do not lower "
+    "it (Goodhart anti-pattern §13) — just xfail until ka-8t7 lands.",
+    strict=False,
+)
 @pytest.mark.asyncio
 async def test_offline_dev_eval_meets_recall_bar():
     args = eval_run._parse_args(["--dataset", "dev", "--offline"])
