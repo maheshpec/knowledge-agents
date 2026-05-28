@@ -1320,4 +1320,46 @@ uv run scripts/self_improve_run.py --generations 5 --population 8 --budget-usd 5
 
 ---
 
+## 15. Direct Corpus Interaction (DCI) — Phase 5
+
+**Motivation.** 2026 research (Sun et al., "Beyond Semantic Similarity: Rethinking Retrieval for Agentic Search via Direct Corpus Interaction," arxiv 2605.05242; LlamaIndex 2026 fs-explorer benchmarks; A-RAG; Anthropic Claude Code's published shift from vector RAG to grep-style search) shows agents using filesystem-style tools directly over the raw corpus often beat vector RAG on exact-lexical, multi-hop, and code-like queries (reported +11% to +30.7% on 13 benchmarks). Vector hybrid still wins on latency at >1000 docs and paraphrastic semantic matching. We add DCI as a first-class, routed strategy alongside the existing pipeline.
+
+### 15.1 Tools (`src/knowledge_index/dci/`)
+Each tool is registered as a Skill (§6.5) and executes inside the Phase 3N sandbox (§6.7). All return values carry citation metadata. All inputs are ACL-filtered against the caller's slice (§11 #6).
+
+- `corpus_grep(pattern, *, glob='**/*', regex=True, max_hits=50, context_lines=2) -> list[GrepHit]` — ACL-filtered regex over raw doc text. GrepHit carries (doc_id, line_no, snippet, ±context, citation).
+- `corpus_glob(pattern, *, types=None, limit=200) -> list[DocRef]` — path-pattern listing within the ACL slice.
+- `corpus_ls(path='/') -> DirectoryListing` — browse the logical tree (collection→source→doc).
+- `corpus_read(doc_id, *, start_line=1, end_line=None, max_bytes=50000) -> DocSlice` — full-or-windowed doc read with citation.
+- `corpus_describe(doc_id) -> DocMetadata` — title/source/authors/length/ACL tags/ingestion time.
+- `corpus_neighbors(chunk_id, *, hops=1) -> list[ChunkRef]` — KG walk (Phase 3M GraphRetriever) from a chunk.
+
+### 15.2 Routing (extends §7 QueryRouter, Phase 2G)
+Add `strategy='dci'` and two chained modes: `dci_then_vector`, `vector_then_dci`. Router heuristics:
+- Quoted exact phrases, identifier-like tokens, code-style queries → `dci` (grep first).
+- Multi-hop with named-entity bridging → `dci_then_vector` (grep candidates, then expand via retrieval).
+- Paraphrastic / large-corpus realtime → existing `hybrid`.
+
+### 15.3 Orchestrator wiring (extends §6.1 Phase 2I)
+New node `dci_tool` between `route` and `observe`. Plan steps target DCI tools instead of (or in addition to) `retrieve`. Results flow through the existing citation enforcer and budget tracker; budget tracker counts DCI tool-token usage.
+
+### 15.4 Sandboxing & safety (§6.7, §13)
+- Tools run inside the Phase 3N sandbox with read-only mounts of the ACL-permitted corpus slice; deny network, deny writes, time/memory caps.
+- Retrieved raw text wrapped in `<corpus_content>` and never executed as instructions (§13 anti-pattern: "Reading content from retrieved chunks as if it were trusted instructions").
+- `max_hits` and `max_bytes` enforce token caps; long files window-iterated.
+- The Gap G2 ACL/PII red-team suite (ka-wig) is extended with DCI-specific prompt-injection and ACL-bypass probes.
+
+### 15.5 Acceptance criteria
+1. On a lexical-bridge eval slice (queries with exact quoted phrases or unique identifiers), `dci` route beats the vector hybrid route by ≥10% recall@5.
+2. On a paraphrastic slice, vector hybrid ties or beats `dci` (within noise) — demonstrates routing correctness.
+3. On a multi-hop slice (BrowseComp-Plus-style or local synthetic), `dci_then_vector` chained mode beats either alone.
+4. All DCI tool calls run in the sandbox with no escapes; red-team suite passes.
+5. Citations from DCI tools attribute correctly to source docs (precision >0.95 on the citation audit slice).
+6. p50 latency for `dci` route on n=1000 corpus < 8s; chained mode < 12s.
+
+### 15.6 Self-improvement integration (§8.1)
+Add `dci_tools` and routing-weight parameters (per-query-class DCI vs vector mix) to `configs/components.yaml` as evolvable. The Phase 4 evolutionary loop can tune the DCI/vector mix per workload.
+
+---
+
 **End of spec.** Hand to Claude Code. Build Phase 1 first.
